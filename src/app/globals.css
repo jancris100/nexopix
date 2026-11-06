@@ -50,27 +50,3 @@ p { margin: 0; }
 .flow .is-done strong { color: var(--mint); }
 .foot { padding-block: 40px; color: var(--soft); font-size: .9rem; }
 
-.panel { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; padding-block: 24px 48px; }
-.card { display: grid; gap: 12px; padding: 18px; border: 2px solid var(--line); background: var(--navy); min-width: 0; }
-.card h2 { margin: 0; }
-label { display: grid; gap: 4px; font-size: .88rem; font-weight: 600; color: var(--soft); }
-select, input { min-height: 44px; padding: 0 10px; border: 2px solid var(--line); background: var(--night); color: var(--white); font: 400 1rem var(--text); }
-.hint { font-size: .84rem; color: var(--soft); }
-
-.steps { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.step { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 12px; align-items: center; padding: 10px 12px; border: 2px solid var(--line); }
-.step strong, .step small { display: block; }
-.step small { color: var(--soft); }
-.dot { width: 14px; height: 14px; background: var(--line); }
-.is-run { border-color: var(--mint-2); }
-.is-run .dot { background: var(--mint-2); animation: blink .6s steps(2) infinite; }
-.is-ok .dot { background: var(--mint); }
-.is-wait { border-color: var(--amber); }
-.is-wait .dot { background: var(--amber); }
-.is-fail { border-color: var(--red); }
-.is-fail .dot { background: var(--red); }
-.approve { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px; border: 2px solid var(--amber); }
-.approve p { flex: 1 1 100%; }
-@keyframes blink { 50% { opacity: .3; } }
-@media (prefers-reduced-motion: reduce) { .is-run .dot { animation: none; } }
-@media (max-width: 800px) { .panel { grid-template-columns: minmax(0, 1fr); } }

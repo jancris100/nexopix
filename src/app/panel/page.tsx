@@ -1,23 +1,20 @@
-import Image from "next/image";
-import Link from "next/link";
 import type { Metadata } from "next";
-import PipelineDemo from "@/components/PipelineDemo";
+import { Bricolage_Grotesque, Figtree } from "next/font/google";
+import PanelApp from "../../components/panel/PanelApp";
+import { loadPanel } from "../../lib/panel";
+import "./panel.css";
+
+const bricolage = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-bricolage", weight: ["500", "600", "700"] });
+const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree" });
 
 export const metadata: Metadata = { title: "Panel · Nexopix" };
+export const dynamic = "force-dynamic";
 
-export default function Panel() {
+export default async function PanelPage() {
+  const snapshot = await loadPanel();
   return (
-    <main>
-      <header className="bar">
-        <Link href="/" className="brand">
-          <Image src="/logo.png" alt="" width={36} height={36} />
-          <span>
-            NEXO<b>PIX</b>
-          </span>
-        </Link>
-        <span className="badge">Demostración · sin agentes reales ni publicaciones</span>
-      </header>
-      <PipelineDemo />
-    </main>
+    <div className={`${bricolage.variable} ${figtree.variable}`}>
+      <PanelApp initial={snapshot} />
+    </div>
   );
 }
