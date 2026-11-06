@@ -10,11 +10,12 @@ export const metadata: Metadata = {
   title: "Nexopix",
   description: "Middleware de agentes de IA para Instagram y Facebook, conectado por API, con aprobación humana.",
   openGraph: { images: ["/banner.png"] },
+  other: { google: "notranslate" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={`${pixel.variable} ${body.variable}`}>
+    <html lang="es" translate="no" className={`${pixel.variable} ${body.variable}`}>
       <body>{children}</body>
     </html>
   );
