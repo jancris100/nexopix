@@ -48,7 +48,7 @@ const isPublicUrl = (value: unknown) => {
  */
 export function checkRequest<T extends Account>(request: Partial<Request>, accounts: readonly T[]): Verdict<T> {
   const title = typeof request.objetivo === "string" ? request.objetivo.trim() : "";
-  if (title.length < 3) return { ok: false, reason: "Falta el objetivo de la publicación." };
+  if (title.length < 3) return { ok: false, reason: "Escribe qué quieres publicar." };
   if (title.length > MAX_TITLE) return { ok: false, reason: `El objetivo admite ${MAX_TITLE} caracteres.` };
 
   const account = accounts.find((item) => item.id === request.cuenta || item.handle === request.cuenta);

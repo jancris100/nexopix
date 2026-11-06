@@ -15,7 +15,7 @@ export async function loadPanel() {
   const today = todayInCostaRica();
   const weekStart = mondayOf(today);
   const [accountRows, agentRows, pieceRows, agendaRows, pendingRows] = await Promise.all([
-    db.select().from(accounts).orderBy(asc(accounts.id)),
+    db.select().from(accounts).orderBy(asc(accounts.handle)),
     db.select().from(agents).orderBy(asc(agents.sortOrder)),
     db.select().from(pieces).orderBy(asc(pieces.id)),
     db.select().from(agendaItems).where(between(agendaItems.scheduledOn, weekStart, addDays(weekStart, 6))).orderBy(asc(agendaItems.time)),

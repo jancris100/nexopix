@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { Pixelify_Sans, Schibsted_Grotesk } from "next/font/google";
+import { Handjet, Schibsted_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const pixel = Pixelify_Sans({ subsets: ["latin"], variable: "--font-pixel", weight: ["400", "600", "700"] });
+const pixel = Handjet({ subsets: ["latin"], variable: "--font-pixel", weight: ["400", "500", "600", "700"] });
 const body = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-body" });
 
 export const metadata: Metadata = {
