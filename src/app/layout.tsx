@@ -6,6 +6,7 @@ const pixel = Pixelify_Sans({ subsets: ["latin"], variable: "--font-pixel", weig
 const body = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-body" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://nexopix.vercel.app"),
   title: "Nexopix",
   description: "Middleware de agentes de IA para Instagram y Facebook, conectado por API, con aprobación humana.",
   openGraph: { images: ["/banner.png"] },
