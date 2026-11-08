@@ -4,7 +4,7 @@ import { accounts, agendaItems, agents, approvals, pieceResults, pieces } from "
 import { addDays, mondayOf, todayInCostaRica } from "./dates";
 import { normalizeHandle } from "./handles";
 import type { InstagramProfile } from "./instagram";
-import { instagramConfig } from "./instagram";
+import { metaConfig } from "./instagram";
 import { checkRequest, FORMATS, type Request } from "./portero";
 import { canEncrypt } from "./secure";
 import { isProtected } from "./session";
@@ -38,7 +38,7 @@ export async function loadPanel() {
     today,
     weekStart,
     isTest: isTestDatabase(),
-    canConnect: Boolean(instagramConfig()) && isProtected() && canEncrypt() && !isTestDatabase(),
+    canConnect: Boolean(metaConfig()) && isProtected() && canEncrypt() && !isTestDatabase(),
     isProtected: isProtected(),
     accounts: accountRows,
     agents: agentRows,

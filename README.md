@@ -25,7 +25,7 @@ Sin `DATABASE_URL` el panel usa un Postgres embebido (`.data/`) con datos de pru
 | `NEXOPIX_API_KEY` | Habilita `POST /api/peticiones` (encabezado `x-api-key`). |
 | `NEXOPIX_PANEL_PASSWORD` | Contraseña del panel. Sin ella el panel queda abierto y no se pueden conectar redes reales. |
 | `NEXOPIX_SECRET` | Clave de al menos 32 caracteres: firma la sesión y cifra los permisos de las redes. |
-| `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | App de Meta con Instagram Login. Redirección: `https://<dominio>/api/meta/callback`. |
+| `META_APP_SECRET` | Clave secreta de la app de Meta (inicio de sesión unificado de Instagram). El ID de la app y el de la configuración ya vienen en el código; se cambian con `META_APP_ID` y `META_CONFIG_ID`. Redirección: `https://<dominio>/api/meta/callback`. |
 
 ## En el teléfono
 

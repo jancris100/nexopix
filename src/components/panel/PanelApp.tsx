@@ -279,8 +279,8 @@ const CONNECT_NOTICES: Record<string, { tone: "ok" | "warn"; text: string }> = {
   conectada: { tone: "ok", text: "Cuenta de Instagram conectada." },
   cancelada: { tone: "warn", text: "Cancelaste la conexión en Instagram. No se guardó nada." },
   vencida: { tone: "warn", text: "La conexión tardó demasiado o no coincide. Vuelve a intentarlo." },
-  "no-profesional": { tone: "warn", text: "Esa cuenta no es profesional. Cámbiala a cuenta de empresa o de creador en Instagram y vuelve a conectarla." },
-  "falta-app": { tone: "warn", text: "Falta configurar la app de Meta en el servidor (INSTAGRAM_APP_ID e INSTAGRAM_APP_SECRET)." },
+  "sin-cuentas": { tone: "warn", text: "No elegiste ninguna cuenta de Instagram al autorizar. Vuelve a conectar y marca la cuenta. Debe ser profesional (empresa o creador)." },
+  "falta-app": { tone: "warn", text: "Falta la clave de la app de Meta en el servidor (META_APP_SECRET)." },
   "falta-seguridad": { tone: "warn", text: "Para conectar cuentas reales el panel necesita contraseña y clave de cifrado (NEXOPIX_PANEL_PASSWORD y NEXOPIX_SECRET)." },
   "falta-base": { tone: "warn", text: "Para conectar cuentas reales hace falta la base de datos permanente (DATABASE_URL)." },
   error: { tone: "warn", text: "Instagram no completó la conexión. Vuelve a intentarlo en unos minutos." },
@@ -387,7 +387,7 @@ function AddNetwork({ canConnect, onClose, onSaved }: { canConnect: boolean; onC
           <span className="net__tile net__tile--instagram" aria-hidden="true">I</span>
           <span>
             <strong>Conectar con Instagram</strong>
-            <small>{canConnect ? "Inicias sesión en Instagram y autorizas a Nexopix a publicar." : "Disponible cuando el servidor tenga la app de Meta, la base y la contraseña."}</small>
+            <small>{canConnect ? "Entras con Instagram o Facebook, eliges la cuenta y autorizas a Nexopix a publicar." : "Disponible cuando el servidor tenga la clave de Meta, la base y la contraseña."}</small>
           </span>
         </a>
         <p className="sheet__or">o agrégala sin conectar</p>

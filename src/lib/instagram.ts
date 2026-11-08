@@ -1,68 +1,76 @@
 /**
- * Instagram API with Instagram Login: the owner of a professional account authorizes Nexopix, which keeps a long-lived
- * token (about 60 days) to read the profile and, later, publish.
+ * Instagram API with Unified Login: the owner logs in with Instagram or Facebook (no Facebook Page needed) through a
+ * Facebook Login for Business configuration, and Nexopix receives a business system user token for the Instagram
+ * accounts the owner chose. Everything is called on graph.facebook.com.
  */
 export const STATE_COOKIE = "np_oauth";
 
-export const INSTAGRAM_SCOPES = ["instagram_business_basic", "instagram_business_content_publish"];
+const GRAPH = "https://graph.facebook.com/v27.0";
+/** The configuration asks for 60 days; the exchange does not always say so. */
+const DEFAULT_TOKEN_DAYS = 60;
 
-export function instagramConfig() {
-  const id = process.env.INSTAGRAM_APP_ID;
-  const secret = process.env.INSTAGRAM_APP_SECRET;
-  return id && secret ? { id, secret } : null;
+/** App and configuration ids are public (they travel in the login URL); only the secret stays on the server. */
+export function metaConfig() {
+  const appId = process.env.META_APP_ID || "2011995049488687";
+  const configId = process.env.META_CONFIG_ID || "2235398597328606";
+  const secret = process.env.META_APP_SECRET;
+  return secret ? { appId, configId, secret } : null;
 }
 
 export const callbackUrl = (origin: string) => `${origin}/api/meta/callback`;
 
-export function authorizeUrl(appId: string, origin: string, state: string) {
-  const url = new URL("https://www.instagram.com/oauth/authorize");
-  url.searchParams.set("client_id", appId);
+export function authorizeUrl(config: { appId: string; configId: string }, origin: string, state: string) {
+  const url = new URL("https://www.facebook.com/dialog/oauth");
+  url.searchParams.set("client_id", config.appId);
+  url.searchParams.set("config_id", config.configId);
   url.searchParams.set("redirect_uri", callbackUrl(origin));
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", INSTAGRAM_SCOPES.join(","));
   url.searchParams.set("state", state);
   return url.toString();
 }
 
 async function read(response: Response, step: string) {
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body.error || body.error_message) {
-    const reason = body.error_message ?? body.error?.message ?? body.error_description ?? `respuesta ${response.status}`;
-    throw new Error(`Instagram rechazó ${step}: ${reason}`);
+  if (!response.ok || body.error) {
+    throw new Error(`Meta rechazó ${step}: ${body.error?.message ?? `respuesta ${response.status}`}`);
   }
   return body;
 }
 
-/** The code of the redirect becomes a short token, then a long-lived one. */
-export async function exchangeCode(config: { id: string; secret: string }, origin: string, code: string) {
-  const form = new URLSearchParams({
-    client_id: config.id,
-    client_secret: config.secret,
-    grant_type: "authorization_code",
-    redirect_uri: callbackUrl(origin),
-    code: code.replace(/#_$/, ""),
-  });
-  const short = await read(await fetch("https://api.instagram.com/oauth/access_token", { method: "POST", body: form }), "el código");
-  const long = new URL("https://graph.instagram.com/access_token");
-  long.searchParams.set("grant_type", "ig_exchange_token");
-  long.searchParams.set("client_secret", config.secret);
-  long.searchParams.set("access_token", short.access_token);
-  const lasting = await read(await fetch(long), "el permiso de larga duración");
-  return { token: String(lasting.access_token), expiresAt: new Date(Date.now() + Number(lasting.expires_in ?? 0) * 1000) };
+/** The code of the redirect becomes the business token. Server side only: it carries the app secret. */
+export async function exchangeCode(config: { appId: string; secret: string }, origin: string, code: string) {
+  const url = new URL(`${GRAPH}/oauth/access_token`);
+  url.searchParams.set("client_id", config.appId);
+  url.searchParams.set("client_secret", config.secret);
+  url.searchParams.set("redirect_uri", callbackUrl(origin));
+  url.searchParams.set("code", code);
+  const body = await read(await fetch(url), "el código");
+  const seconds = Number(body.expires_in) > 0 ? Number(body.expires_in) : DEFAULT_TOKEN_DAYS * 24 * 3600;
+  return { token: String(body.access_token), expiresAt: new Date(Date.now() + seconds * 1000) };
 }
 
-export type InstagramProfile = { userId: string; username: string; accountType: string; avatarUrl: string | null; followers: number | null };
+export type InstagramProfile = { userId: string; username: string; avatarUrl: string | null; followers: number | null };
 
-export async function profile(token: string): Promise<InstagramProfile> {
-  const url = new URL("https://graph.instagram.com/me");
-  url.searchParams.set("fields", "user_id,username,account_type,profile_picture_url,followers_count");
-  url.searchParams.set("access_token", token);
-  const body = await read(await fetch(url), "el perfil");
-  return {
-    userId: String(body.user_id ?? body.id),
-    username: String(body.username),
-    accountType: String(body.account_type ?? ""),
-    avatarUrl: body.profile_picture_url ?? null,
-    followers: typeof body.followers_count === "number" ? body.followers_count : null,
-  };
+/** The Instagram accounts the owner gave access to, with their picture and followers when Meta returns them. */
+export async function assignedAccounts(token: string): Promise<InstagramProfile[]> {
+  const list = new URL(`${GRAPH}/me/assigned_instagram_accounts`);
+  list.searchParams.set("fields", "id,username");
+  list.searchParams.set("access_token", token);
+  const body = await read(await fetch(list), "la lista de cuentas");
+  const accounts: { id: string; username: string }[] = body.data ?? [];
+  return Promise.all(
+    accounts.map(async (account) => {
+      const detail = new URL(`${GRAPH}/${encodeURIComponent(account.id)}`);
+      detail.searchParams.set("fields", "username,profile_picture_url,followers_count");
+      detail.searchParams.set("access_token", token);
+      type Detail = { username?: string; profile_picture_url?: string; followers_count?: number };
+      const extra: Detail = await fetch(detail).then((response) => (response.ok ? response.json() : {})).catch(() => ({}));
+      return {
+        userId: String(account.id),
+        username: String(extra.username ?? account.username),
+        avatarUrl: typeof extra.profile_picture_url === "string" ? extra.profile_picture_url : null,
+        followers: typeof extra.followers_count === "number" ? extra.followers_count : null,
+      };
+    }),
+  );
 }

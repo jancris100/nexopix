@@ -17,11 +17,14 @@ test("tokens are encrypted and only the same key opens them", () => {
   assert.ok(sameText("x", "x") && !sameText("x", "y"));
 });
 
-test("the authorization asks only what it needs and comes back here", () => {
-  const url = new URL(authorizeUrl("123", "https://nexopix.vercel.app", "estado"));
-  assert.equal(url.origin + url.pathname, "https://www.instagram.com/oauth/authorize");
+test("the authorization uses the login configuration and comes back here", () => {
+  const url = new URL(authorizeUrl({ appId: "123", configId: "456" }, "https://nexopix.vercel.app", "estado"));
+  assert.equal(url.origin + url.pathname, "https://www.facebook.com/dialog/oauth");
+  assert.equal(url.searchParams.get("client_id"), "123");
+  assert.equal(url.searchParams.get("config_id"), "456");
   assert.equal(url.searchParams.get("redirect_uri"), "https://nexopix.vercel.app/api/meta/callback");
-  assert.equal(url.searchParams.get("scope"), "instagram_business_basic,instagram_business_content_publish");
+  assert.equal(url.searchParams.get("response_type"), "code");
+  assert.equal(url.searchParams.get("scope"), null);
   assert.equal(url.searchParams.get("state"), "estado");
 });
 
