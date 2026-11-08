@@ -29,6 +29,11 @@ export async function decide(id: number, approved: boolean) {
   return panel.loadPanel();
 }
 
+export async function saveProfile(id: string, profile: panel.BrandProfile) {
+  const error = await panel.saveBrandProfile(id, profile);
+  return error ? { error } : { snapshot: await panel.loadPanel() };
+}
+
 export async function addPublication(input: { title: string; format: string; accountId: string; network: string; date: string }) {
   const result = await panel.createRequest(
     { cuenta: input.accountId, red: input.network, formato: input.format, objetivo: input.title },

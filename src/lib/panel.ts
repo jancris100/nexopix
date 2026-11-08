@@ -1,6 +1,6 @@
 import { and, asc, between, eq } from "drizzle-orm";
 import { getDb, isTestDatabase } from "../db";
-import { accounts, agendaItems, agents, approvals, pieces } from "../db/schema";
+import { accounts, agendaItems, agents, approvals, pieceResults, pieces } from "../db/schema";
 import { addDays, mondayOf, todayInCostaRica } from "./dates";
 import { checkRequest, FORMATS, type Request } from "./portero";
 
@@ -14,12 +14,13 @@ export async function loadPanel() {
   const db = await getDb();
   const today = todayInCostaRica();
   const weekStart = mondayOf(today);
-  const [accountRows, agentRows, pieceRows, agendaRows, pendingRows] = await Promise.all([
+  const [accountRows, agentRows, pieceRows, agendaRows, pendingRows, resultRows] = await Promise.all([
     db.select().from(accounts).orderBy(asc(accounts.handle)),
     db.select().from(agents).orderBy(asc(agents.sortOrder)),
     db.select().from(pieces).orderBy(asc(pieces.id)),
     db.select().from(agendaItems).where(between(agendaItems.scheduledOn, weekStart, addDays(weekStart, 6))).orderBy(asc(agendaItems.time)),
     db.select().from(approvals).where(eq(approvals.status, "pending")).orderBy(asc(approvals.id)),
+    db.select().from(pieceResults),
   ]);
   return {
     today,
@@ -29,6 +30,7 @@ export async function loadPanel() {
     agents: agentRows,
     pieces: pieceRows,
     agenda: agendaRows,
+    results: resultRows,
     approvals: pendingRows.map(({ id, pieceId, agent }) => ({ id, pieceId, agent })),
   };
 }
@@ -49,6 +51,21 @@ export async function toggleAccount(id: string) {
   const db = await getDb();
   const [account] = await db.select({ linked: accounts.linked }).from(accounts).where(eq(accounts.id, id));
   if (account) await db.update(accounts).set({ linked: !account.linked }).where(eq(accounts.id, id));
+}
+
+export type BrandProfile = { website: string; voice: string; offer: string; audience: string; neverPromise: string; businessInfo: string };
+
+const LIMITS: Record<keyof BrandProfile, number> = { website: 200, voice: 400, offer: 400, audience: 400, neverPromise: 400, businessInfo: 1000 };
+
+/** What the writers read before each piece. Returns the reason when it can't be saved. */
+export async function saveBrandProfile(id: string, profile: BrandProfile) {
+  const clean = Object.fromEntries((Object.keys(LIMITS) as (keyof BrandProfile)[]).map((key) => [key, String(profile[key] ?? "").trim().slice(0, LIMITS[key])])) as BrandProfile;
+  if (clean.website && !/^https:\/\/[^\s]+\.[^\s]+$/.test(clean.website)) {
+    return "El sitio web debe empezar con https://";
+  }
+  const db = await getDb();
+  await db.update(accounts).set(clean).where(eq(accounts.id, id));
+  return null;
 }
 
 /** Moves a piece one stage. Entering review asks a person; leaving review only happens by deciding. */

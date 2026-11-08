@@ -7,6 +7,12 @@ export const accounts = pgTable("accounts", {
   brand: text("brand").notNull(),
   scene: integer("scene").notNull().default(0),
   linked: boolean("linked").notNull().default(false),
+  website: text("website").notNull().default(""),
+  voice: text("voice").notNull().default(""),
+  offer: text("offer").notNull().default(""),
+  audience: text("audience").notNull().default(""),
+  neverPromise: text("never_promise").notNull().default(""),
+  businessInfo: text("business_info").notNull().default(""),
 });
 
 export const agents = pgTable("agents", {
@@ -46,6 +52,13 @@ export const agendaItems = pgTable(
   },
   (table) => [index("agenda_scheduled_on").on(table.scheduledOn)],
 );
+
+/** What a published piece brought. Filled by hand in the demo; by the networks once they are connected. */
+export const pieceResults = pgTable("piece_results", {
+  pieceId: integer("piece_id").primaryKey().references(() => pieces.id),
+  clicks: integer("clicks").notNull().default(0),
+  leads: integer("leads").notNull().default(0),
+});
 
 /** What a person must decide. Nothing leaves review without one of these resolved. */
 export const approvals = pgTable(

@@ -24,6 +24,12 @@ Sin `DATABASE_URL` el panel usa un Postgres embebido (`.data/`) con datos de pru
 | `DATABASE_URL` | Base en Neon. Prepárala una vez con `npm run db:setup`. |
 | `NEXOPIX_API_KEY` | Habilita `POST /api/peticiones` (encabezado `x-api-key`). |
 
+## En el teléfono
+
+El panel se instala como aplicación (PWA): en Android, "Instalar app"; en iPhone, Compartir y "Agregar a inicio".
+Abre en `/panel`, a pantalla completa. Pendiente para una app de tienda: la API con inicio de sesión que usarían
+la web y la app por igual, y las notificaciones de "Te toca decidir".
+
 ```bash
 npm test             # reglas del Portero y fechas
 npm run db:generate  # migración tras cambiar src/db/schema.ts

@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
-import { Handjet, Schibsted_Grotesk } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Instrument_Sans } from "next/font/google";
 import "./globals.css";
 
-const pixel = Handjet({ subsets: ["latin"], variable: "--font-pixel", weight: ["400", "500", "600", "700"] });
-const body = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-body" });
+const sans = Instrument_Sans({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://nexopix.vercel.app"),
@@ -11,11 +10,18 @@ export const metadata: Metadata = {
   description: "Middleware de agentes de IA para Instagram y Facebook, conectado por API, con aprobación humana.",
   openGraph: { images: ["/banner.png"] },
   other: { google: "notranslate" },
+  appleWebApp: { capable: true, title: "Nexopix", statusBarStyle: "default" },
+};
+
+/** Reaches the edges of phones with a notch; the screens keep their content inside the safe area. */
+export const viewport: Viewport = {
+  themeColor: "#F5F6F3",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" translate="no" className={`${pixel.variable} ${body.variable}`}>
+    <html lang="es" translate="no" className={sans.variable}>
       <body>{children}</body>
     </html>
   );
