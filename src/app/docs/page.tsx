@@ -6,6 +6,7 @@ import { LanguageSwitch } from "../../i18n/client";
 import { getDictionary, getLocale } from "../../i18n/server";
 import { DOCS, type Field } from "./content";
 import CopyButton from "./CopyButton";
+import DocsNav from "./DocsNav";
 import "./docs.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -226,12 +227,7 @@ export default async function ApiDocs() {
       </header>
 
       <div className="wrap docs__grid">
-        <nav className="docs__nav" aria-label={doc.onThisPage}>
-          <p>{doc.onThisPage}</p>
-          <ol>
-            {doc.sections.map((section) => <li key={section.id}><a href={`#${section.id}`}>{section.label}</a></li>)}
-          </ol>
-        </nav>
+        <DocsNav sections={doc.sections} label={doc.onThisPage} />
 
         <main className="docs__main">
           <section id="intro" className="docs__intro">

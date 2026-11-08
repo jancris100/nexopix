@@ -80,8 +80,13 @@
 
 @media (max-width: 900px) {
   .docs__grid { grid-template-columns: minmax(0, 1fr); gap: 28px; padding-top: 24px; }
-  .docs__nav { position: static; padding: 14px 16px; border: 1px solid var(--hair); border-radius: 14px; background: var(--card); }
-  .docs__nav ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .docs__nav { position: sticky; top: 64px; z-index: 4; margin-inline: -20px; padding: 8px 20px; border-bottom: 1px solid var(--hair); background: rgba(245, 246, 243, .94); backdrop-filter: blur(8px); }
+  .docs__nav p { display: none; }
+  .docs__nav ol { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .docs__nav ol::-webkit-scrollbar { display: none; }
+  .docs .docs__nav a { white-space: nowrap; }
+  .docs .docs__nav a.is-active::before { display: none; }
+  .docs__main section, .docs__main h3 { scroll-margin-top: 130px; }
   .docs__crumb { display: none; }
   .flow li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .flow li::before { top: 16px; }
@@ -97,4 +102,14 @@
 @media (max-width: 640px) {
   .docs__panel { display: none; }
   .docs__bar-in { justify-content: space-between; }
+}
+
+/* The section being read, marked in the index. */
+.docs .docs__nav a { position: relative; color: var(--graphite); transition: background .15s ease, color .15s ease; }
+.docs .docs__nav a.is-active { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--hair); }
+.docs .docs__nav a.is-active::before { content: ""; position: absolute; left: -2px; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .docs .docs__nav a { transition: none; } }
+@media (max-width: 640px) {
+  .table table { min-width: 620px; }
+  .table tbody th { white-space: normal; }
 }
