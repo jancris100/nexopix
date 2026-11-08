@@ -4,9 +4,9 @@ import { accounts, agendaItems, agents, approvals, pieceResults, pieces } from "
 import { addDays, isDate, mondayOf, todayInCostaRica } from "./dates";
 import { normalizeHandle } from "./handles";
 import type { InstagramProfile } from "./instagram";
-import { metaConfig } from "./instagram";
+import { mediaInsights, metaConfig, recentMedia } from "./instagram";
 import { checkRequest, FORMATS, type Request } from "./portero";
-import { canEncrypt } from "./secure";
+import { canEncrypt, decrypt } from "./secure";
 import { isProtected } from "./session";
 
 /** What the screen may know about an account: never its token. */
@@ -181,4 +181,48 @@ export async function createRequest(request: Partial<Request>, scheduledOn?: str
     await db.insert(agendaItems).values({ scheduledOn, time: "12:00", title, format, accountId: account.id });
   }
   return { ok: true as const, pieceId: piece.id, manual };
+}
+
+/** The connected Instagram accounts with their opened token: server only, never sent to the screen. */
+async function connectedInstagram(accountId?: string) {
+  const db = await getDb();
+  const rows = await db
+    .select({ id: accounts.id, handle: accounts.handle, externalId: accounts.externalId, tokenCipher: accounts.tokenCipher, tokenExpiresAt: accounts.tokenExpiresAt })
+    .from(accounts)
+    .where(accountId ? and(eq(accounts.network, "instagram"), eq(accounts.id, accountId)) : eq(accounts.network, "instagram"));
+  return rows.flatMap((row) => {
+    if (!row.externalId || !row.tokenCipher) return [];
+    try {
+      return [{ id: row.id, handle: row.handle, userId: row.externalId, token: decrypt(row.tokenCipher), expired: Boolean(row.tokenExpiresAt && row.tokenExpiresAt < new Date()) }];
+    } catch {
+      return [];
+    }
+  });
+}
+
+/** What every connected account has published on Instagram, newest first, and which accounts could not be read. */
+export async function instagramPosts() {
+  const linked = await connectedInstagram();
+  const settled = await Promise.all(
+    linked.map(async (account) => {
+      if (account.expired) return { posts: [], problem: `${account.handle}: el permiso venció, vuelve a conectarla en Redes.` };
+      try {
+        return { posts: await recentMedia(account.userId, account.token, account.id), problem: null };
+      } catch (error) {
+        console.error("Instagram media failed", account.id, error instanceof Error ? error.message : error);
+        return { posts: [], problem: `${account.handle}: Instagram no entregó las publicaciones.` };
+      }
+    }),
+  );
+  return {
+    posts: settled.flatMap((result) => result.posts).sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
+    problems: settled.flatMap((result) => (result.problem ? [result.problem] : [])),
+  };
+}
+
+export async function instagramPostInsights(accountId: string, mediaId: string) {
+  if (!/^\d+$/.test(mediaId)) return { insights: null, reason: "no-disponible" };
+  const [account] = await connectedInstagram(accountId);
+  if (!account) return { insights: null, reason: "sin-cuenta" };
+  return mediaInsights(mediaId, account.token);
 }

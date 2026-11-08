@@ -119,3 +119,58 @@ export async function assignedAccounts(token: string, config: { appId: string; s
   );
   return { accounts: accounts.filter((account): account is InstagramProfile => account !== null), note };
 }
+
+export type InstagramPost = {
+  id: string;
+  accountId: string;
+  caption: string;
+  kind: string;
+  mediaUrl: string | null;
+  thumbnailUrl: string | null;
+  permalink: string | null;
+  timestamp: string;
+  likes: number | null;
+  comments: number | null;
+};
+
+/** The latest posts of an Instagram account, with the counts every post carries. */
+export async function recentMedia(userId: string, token: string, accountId: string, limit = 60): Promise<InstagramPost[]> {
+  const url = new URL(`${GRAPH}/${encodeURIComponent(userId)}/media`);
+  url.searchParams.set("fields", "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count");
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("access_token", token);
+  const body = await read(await fetch(url, { cache: "no-store" }), "las publicaciones");
+  type Media = { id: string; caption?: string; media_type?: string; media_product_type?: string; media_url?: string; thumbnail_url?: string; permalink?: string; timestamp: string; like_count?: number; comments_count?: number };
+  return ((body.data ?? []) as Media[]).map((media) => ({
+    id: String(media.id),
+    accountId,
+    caption: media.caption ?? "",
+    kind: media.media_product_type === "REELS" ? "reel" : media.media_product_type === "STORY" ? "historia" : media.media_type === "CAROUSEL_ALBUM" ? "carrusel" : media.media_type === "VIDEO" ? "video" : "foto",
+    mediaUrl: media.media_type === "VIDEO" ? null : media.media_url ?? null,
+    thumbnailUrl: media.thumbnail_url ?? null,
+    permalink: media.permalink ?? null,
+    timestamp: media.timestamp,
+    likes: typeof media.like_count === "number" ? media.like_count : null,
+    comments: typeof media.comments_count === "number" ? media.comments_count : null,
+  }));
+}
+
+export type PostInsights = { views?: number; reach?: number; saved?: number; shares?: number; total_interactions?: number };
+
+/** Views, reach, saves and shares. They need the insights permission; without it Meta says so and null comes back. */
+export async function mediaInsights(mediaId: string, token: string): Promise<{ insights: PostInsights | null; reason: string | null }> {
+  const url = new URL(`${GRAPH}/${encodeURIComponent(mediaId)}/insights`);
+  url.searchParams.set("metric", "views,reach,saved,shares,total_interactions");
+  url.searchParams.set("access_token", token);
+  const body = await fetch(url, { cache: "no-store" }).then((response) => response.json()).catch(() => ({}));
+  if (body.error || !Array.isArray(body.data)) {
+    const message = String(body.error?.message ?? "");
+    return { insights: null, reason: /permission|instagram_manage_insights|\(#10\)|\(#200\)/i.test(message) ? "permiso" : "no-disponible" };
+  }
+  const insights: PostInsights = {};
+  for (const metric of body.data as { name: keyof PostInsights; values?: { value: number }[]; total_value?: { value: number } }[]) {
+    const value = metric.total_value?.value ?? metric.values?.[0]?.value;
+    if (typeof value === "number") insights[metric.name] = value;
+  }
+  return { insights, reason: null };
+}

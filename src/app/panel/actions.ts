@@ -7,6 +7,14 @@ export async function weekAgenda(weekStart: string) {
   return panel.loadWeek(weekStart);
 }
 
+export async function instagramPosts() {
+  return panel.instagramPosts();
+}
+
+export async function postInsights(accountId: string, mediaId: string) {
+  return panel.instagramPostInsights(accountId, mediaId);
+}
+
 export async function toggleItem(id: number) {
   await panel.toggleAgendaItem(id);
   return panel.loadPanel();

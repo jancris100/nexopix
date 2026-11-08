@@ -4,8 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, useTransition, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
-import { addAccount, addPublication, advance, decide, removeAccount, saveProfile, toggleAgent, toggleItem, weekAgenda } from "../../app/panel/actions";
-import { addDays, mondayOf, shortDate, weekNumber, weekRange } from "../../lib/dates";
+import { addAccount, addPublication, advance, decide, removeAccount, saveProfile, toggleAgent, toggleItem, weekAgenda, instagramPosts, postInsights } from "../../app/panel/actions";
+import { addDays, mondayOf, shortDate, todayInCostaRica, weekNumber, weekRange } from "../../lib/dates";
 import { morningSummary, trackedLink } from "../../lib/insights";
 import type { Snapshot } from "../../lib/panel";
 import { FORMATS, type Format } from "../../lib/portero";
@@ -227,54 +227,241 @@ function Week({ snap, busy, day, onPickDay, accountOf, onToggle }: {
         </>
       )}
 
-      {mode === "history" && <History snap={snap} accountOf={accountOf} />}
+      {mode === "history" && <History snap={snap} busy={busy} accountOf={accountOf} onToggle={onToggle} />}
     </section>
   );
 }
 
-/** Everything planned up to today, week by week, with what was published and what was left out. */
-function History({ snap, accountOf }: { snap: Snapshot; accountOf: (id: string) => Account | undefined }) {
+type Post = Awaited<ReturnType<typeof instagramPosts>>["posts"][number];
+type Entry = {
+  key: string;
+  date: string;
+  time: string;
+  title: string;
+  kind: string;
+  accountId: string;
+  state: "done" | "missed" | "due";
+  item?: AgendaItem;
+  post?: Post;
+};
+
+const POST_KINDS: Record<string, string> = { reel: "Reel", foto: "Foto", carrusel: "Carrusel", video: "Video", historia: "Historia" };
+const STATE_TEXT = { done: "Publicada", missed: "No se publicó", due: "Pendiente" };
+const costaRicaTime = new Intl.DateTimeFormat("es-CR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Costa_Rica" });
+const monthName = new Intl.DateTimeFormat("es-CR", { month: "long", year: "numeric", timeZone: "UTC" });
+const monthLabel = (month: string) => {
+  const text = monthName.format(new Date(`${month}-15T12:00:00Z`)).replace(" de ", " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
+const firstLine = (caption: string) => caption.split("\n").find((line) => line.trim())?.trim() ?? "";
+
+/** Everything planned in Nexopix and everything already on Instagram, by week, filtered by month and account. */
+function History({ snap, busy, accountOf, onToggle }: { snap: Snapshot; busy: boolean; accountOf: (id: string) => Account | undefined; onToggle: (id: number) => void }) {
   const [accountId, setAccountId] = useState("all");
-  const rows = snap.history.filter((item) => accountId === "all" || item.accountId === accountId);
-  const groups = new Map<string, AgendaItem[]>();
-  for (const item of rows) {
-    const monday = mondayOf(item.scheduledOn);
-    groups.set(monday, [...(groups.get(monday) ?? []), item]);
+  const [month, setMonth] = useState("all");
+  const [open, setOpen] = useState<string | null>(null);
+  const [remote, setRemote] = useState<{ posts: Post[]; problems: string[] } | null>(null);
+  const hasInstagram = snap.accounts.some((account) => account.network === "instagram" && account.linked);
+
+  useEffect(() => {
+    if (!hasInstagram) return;
+    let live = true;
+    instagramPosts()
+      .then((result) => live && setRemote(result))
+      .catch(() => live && setRemote({ posts: [], problems: ["No se pudieron leer las publicaciones de Instagram."] }));
+    return () => {
+      live = false;
+    };
+  }, [hasInstagram]);
+
+  const entries: Entry[] = [
+    ...snap.history.map((item) => ({
+      key: `plan-${item.id}`,
+      date: item.scheduledOn,
+      time: item.time,
+      title: item.title,
+      kind: formatLabel(item.format),
+      accountId: item.accountId,
+      state: (item.done ? "done" : item.scheduledOn < snap.today ? "missed" : "due") as Entry["state"],
+      item,
+    })),
+    ...(remote?.posts ?? []).map((post) => ({
+      key: `ig-${post.id}`,
+      date: todayInCostaRica(new Date(post.timestamp)),
+      time: costaRicaTime.format(new Date(post.timestamp)),
+      title: firstLine(post.caption) || "Sin texto",
+      kind: POST_KINDS[post.kind] ?? post.kind,
+      accountId: post.accountId,
+      state: "done" as const,
+      post,
+    })),
+  ].sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
+
+  const months = [...new Set(entries.map((entry) => entry.date.slice(0, 7)))];
+  const rows = entries.filter((entry) => (accountId === "all" || entry.accountId === accountId) && (month === "all" || entry.date.startsWith(month)));
+  const groups = new Map<string, Entry[]>();
+  for (const entry of rows) {
+    const monday = mondayOf(entry.date);
+    groups.set(monday, [...(groups.get(monday) ?? []), entry]);
   }
-  const state = (item: AgendaItem) => (item.done ? "done" : item.scheduledOn < snap.today ? "missed" : "due");
-  const STATE_TEXT = { done: "Publicada", missed: "No se publicó", due: "Pendiente" };
+  const weekName = (monday: string) => (monday >= snap.firstWeek ? `Semana ${weekNumber(snap.firstWeek, monday)}` : "Antes de Nexopix");
+  const opened = entries.find((entry) => entry.key === open);
 
   return (
     <>
-      {snap.accounts.length > 1 && (
+      <div className="history__filters">
         <label className="history__filter">
-          Cuenta
-          <select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
-            <option value="all">Todas</option>
-            {snap.accounts.map((account) => <option key={account.id} value={account.id}>{account.handle}</option>)}
+          Mes
+          <select value={month} onChange={(event) => setMonth(event.target.value)}>
+            <option value="all">Todos</option>
+            {months.map((value) => <option key={value} value={value}>{monthLabel(value)}</option>)}
           </select>
         </label>
+        {snap.accounts.length > 1 && (
+          <label className="history__filter">
+            Cuenta
+            <select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+              <option value="all">Todas</option>
+              {snap.accounts.map((account) => <option key={account.id} value={account.id}>{account.handle}</option>)}
+            </select>
+          </label>
+        )}
+      </div>
+      {hasInstagram && !remote && <p className="np-note" aria-live="polite">Leyendo tus publicaciones de Instagram…</p>}
+      {remote?.problems.map((problem) => <p key={problem} className="np-alert" role="alert">{problem}</p>)}
+      {groups.size === 0 && (remote || !hasInstagram) && (
+        <p className="np-note">{entries.length === 0 ? "Aún no hay publicaciones. Lo que planees y publiques queda guardado aquí, semana por semana." : "No hay publicaciones con estos filtros."}</p>
       )}
-      {groups.size === 0 && <p className="np-note">Aún no hay publicaciones. Lo que planees y publiques queda guardado aquí, semana por semana.</p>}
       {[...groups.entries()].map(([monday, list]) => (
-        <section key={monday} className="group" aria-label={`Semana ${weekNumber(snap.firstWeek, monday)}`}>
+        <section key={monday} className="group" aria-label={weekName(monday)}>
           <h2 className="history__week">
-            {`Semana ${weekNumber(snap.firstWeek, monday)}`}
-            <small>{`del ${weekRange(monday)}, ${list.filter((item) => item.done).length} de ${list.length} publicadas`}</small>
+            {weekName(monday)}
+            <small>{`del ${weekRange(monday)}, ${list.filter((entry) => entry.state === "done").length} de ${list.length} publicadas`}</small>
           </h2>
-          {list.map((item) => (
-            <article key={item.id} className="history__row">
-              <p className="history__date">{shortDate(item.scheduledOn)}<small>{item.time}</small></p>
-              <div className="piece__text">
-                <strong>{item.title}</strong>
-                <small>{`${formatLabel(item.format)} en ${accountOf(item.accountId)?.handle ?? "cuenta eliminada"}`}</small>
-              </div>
-              <p className={`history__state is-${state(item)}`}>{STATE_TEXT[state(item)]}</p>
-            </article>
+          {list.map((entry) => (
+            <button key={entry.key} type="button" className="history__row" onClick={() => setOpen(entry.key)}>
+              <span className="history__date">{shortDate(entry.date)}<small>{entry.time}</small></span>
+              <span className="history__main">
+                {entry.post && <PostThumb post={entry.post} size={44} />}
+                <span className="piece__text">
+                  <strong>{entry.title}</strong>
+                  <small>
+                    {`${entry.kind} en ${accountOf(entry.accountId)?.handle ?? "cuenta eliminada"}`}
+                    {entry.post && entry.post.likes !== null && `, ${entry.post.likes} me gusta, ${entry.post.comments ?? 0} comentarios`}
+                  </small>
+                </span>
+              </span>
+              <span className={`history__state is-${entry.state}`}>{entry.post ? "En Instagram" : STATE_TEXT[entry.state]}</span>
+            </button>
           ))}
         </section>
       ))}
+      {opened && (
+        <PostDetail
+          entry={opened}
+          account={accountOf(opened.accountId)}
+          busy={busy}
+          onClose={() => setOpen(null)}
+          onToggle={(id) => {
+            onToggle(id);
+            setOpen(null);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function PostThumb({ post, size }: { post: Post; size: number }) {
+  const source = post.thumbnailUrl ?? post.mediaUrl;
+  if (!source) return <span className="thumb thumb--empty" style={{ width: size, height: size }} aria-hidden="true" />;
+  // eslint-disable-next-line @next/next/no-img-element -- Instagram's image addresses change and expire; they are shown as they come.
+  return <img className="thumb" src={source} alt="" width={size} height={size} loading="lazy" referrerPolicy="no-referrer" />;
+}
+
+/** One publication opened: what it said, where and when, and the numbers Instagram gives for it. */
+function PostDetail({ entry, account, busy, onClose, onToggle }: { entry: Entry; account?: Account; busy: boolean; onClose: () => void; onToggle: (id: number) => void }) {
+  const [insights, setInsights] = useState<Awaited<ReturnType<typeof postInsights>> | null>(null);
+  const post = entry.post;
+
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!post) return;
+    let live = true;
+    postInsights(post.accountId, post.id)
+      .then((result) => live && setInsights(result))
+      .catch(() => live && setInsights({ insights: null, reason: "no-disponible" }));
+    return () => {
+      live = false;
+    };
+  }, [post]);
+
+  const numbers: [string, number | null | undefined][] = post
+    ? [
+        ["Me gusta", post.likes],
+        ["Comentarios", post.comments],
+        ["Vistas", insights?.insights?.views],
+        ["Alcance", insights?.insights?.reach],
+        ["Guardados", insights?.insights?.saved],
+        ["Compartidos", insights?.insights?.shares],
+      ]
+    : [];
+
+  return (
+    <div className="np-scrim" onClick={(event) => event.target === event.currentTarget && onClose()}>
+      <section role="dialog" aria-modal="true" aria-label="Detalle de la publicación" className="sheet detail">
+        <div className="sheet__head detail__head">
+          <div>
+            <h2>{entry.post ? "Publicación en Instagram" : "Publicación planeada"}</h2>
+            <p>{`${entry.kind} en ${account?.handle ?? "cuenta eliminada"}, ${shortDate(entry.date)} a las ${entry.time}`}</p>
+          </div>
+          <button type="button" className="sheet__close" aria-label="Cerrar" onClick={onClose} autoFocus>×</button>
+        </div>
+
+        {post && (post.mediaUrl || post.thumbnailUrl) && (
+          // eslint-disable-next-line @next/next/no-img-element -- see PostThumb.
+          <img className="detail__media" src={post.mediaUrl ?? post.thumbnailUrl ?? ""} alt={firstLine(post.caption) || "Publicación de Instagram"} referrerPolicy="no-referrer" />
+        )}
+
+        {post ? (
+          <p className="detail__caption">{post.caption || "Sin texto."}</p>
+        ) : (
+          <div className="detail__plan">
+            <strong>{entry.title}</strong>
+            <p className={`history__state is-${entry.state}`}>{STATE_TEXT[entry.state]}</p>
+          </div>
+        )}
+
+        {post && (
+          <>
+            <dl className="detail__numbers">
+              {numbers.map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{typeof value === "number" ? value.toLocaleString("es-CR") : insights ? "No disponible" : "…"}</dd>
+                </div>
+              ))}
+            </dl>
+            {insights?.reason === "permiso" && <p className="np-note">Vistas, alcance, guardados y compartidos necesitan el permiso de estadísticas de Instagram. Cuando se agregue, vuelve a conectar la cuenta en Redes.</p>}
+            {post.permalink && <a className="np-btn np-btn--wide" href={post.permalink} target="_blank" rel="noreferrer">Abrir en Instagram</a>}
+          </>
+        )}
+
+        {entry.item && (
+          <>
+            <p className="np-note">Cuando Nexopix publique por ti, aquí verás también las cifras de esta publicación.</p>
+            <button type="button" className="np-btn np-btn--go np-btn--wide" disabled={busy} onClick={() => onToggle(entry.item!.id)}>
+              {entry.item.done ? "Marcar como no publicada" : "Marcar como publicada"}
+            </button>
+          </>
+        )}
+      </section>
+    </div>
   );
 }
 
