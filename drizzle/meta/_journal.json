@@ -15,6 +15,13 @@
       "when": 1793942698589,
       "tag": "0001_marca_y_resultados",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794154493585,
+      "tag": "0002_conexion_instagram",
+      "breakpoints": true
     }
   ]
 }

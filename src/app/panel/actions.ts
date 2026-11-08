@@ -14,8 +14,13 @@ export async function toggleAgent(id: string) {
   return panel.loadPanel();
 }
 
-export async function toggleAccount(id: string) {
-  await panel.toggleAccount(id);
+export async function addAccount(network: string, name: string, brand: string) {
+  const error = await panel.addAccount(network, name, brand);
+  return error ? { error } : { snapshot: await panel.loadPanel() };
+}
+
+export async function removeAccount(id: string) {
+  await panel.removeAccount(id);
   return panel.loadPanel();
 }
 

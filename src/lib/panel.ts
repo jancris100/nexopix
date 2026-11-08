@@ -2,7 +2,19 @@ import { and, asc, between, eq } from "drizzle-orm";
 import { getDb, isTestDatabase } from "../db";
 import { accounts, agendaItems, agents, approvals, pieceResults, pieces } from "../db/schema";
 import { addDays, mondayOf, todayInCostaRica } from "./dates";
+import { normalizeHandle } from "./handles";
+import type { InstagramProfile } from "./instagram";
+import { instagramConfig } from "./instagram";
 import { checkRequest, FORMATS, type Request } from "./portero";
+import { canEncrypt } from "./secure";
+import { isProtected } from "./session";
+
+/** What the screen may know about an account: never its token. */
+const accountColumns = {
+  id: accounts.id, handle: accounts.handle, network: accounts.network, brand: accounts.brand, scene: accounts.scene, linked: accounts.linked,
+  website: accounts.website, voice: accounts.voice, offer: accounts.offer, audience: accounts.audience, neverPromise: accounts.neverPromise,
+  businessInfo: accounts.businessInfo, avatarUrl: accounts.avatarUrl, followers: accounts.followers, tokenExpiresAt: accounts.tokenExpiresAt,
+};
 
 const REVIEW = 2;
 const SCHEDULED = 3;
@@ -15,7 +27,7 @@ export async function loadPanel() {
   const today = todayInCostaRica();
   const weekStart = mondayOf(today);
   const [accountRows, agentRows, pieceRows, agendaRows, pendingRows, resultRows] = await Promise.all([
-    db.select().from(accounts).orderBy(asc(accounts.handle)),
+    db.select(accountColumns).from(accounts).orderBy(asc(accounts.handle)),
     db.select().from(agents).orderBy(asc(agents.sortOrder)),
     db.select().from(pieces).orderBy(asc(pieces.id)),
     db.select().from(agendaItems).where(between(agendaItems.scheduledOn, weekStart, addDays(weekStart, 6))).orderBy(asc(agendaItems.time)),
@@ -26,6 +38,8 @@ export async function loadPanel() {
     today,
     weekStart,
     isTest: isTestDatabase(),
+    canConnect: Boolean(instagramConfig()) && isProtected() && canEncrypt() && !isTestDatabase(),
+    isProtected: isProtected(),
     accounts: accountRows,
     agents: agentRows,
     pieces: pieceRows,
@@ -47,10 +61,45 @@ export async function toggleAgent(id: string) {
   if (agent) await db.update(agents).set({ active: !agent.active }).where(eq(agents.id, id));
 }
 
-export async function toggleAccount(id: string) {
+/** An account planned by hand: it can receive pieces and be connected later. Returns the reason when it can't. */
+export async function addAccount(network: string, name: string, brand: string) {
+  const handle = normalizeHandle(network, name);
+  if (!handle) return network === "instagram" ? "Escribe el usuario de Instagram: letras, números, punto o guion bajo." : "Escribe el nombre de la página.";
   const db = await getDb();
-  const [account] = await db.select({ linked: accounts.linked }).from(accounts).where(eq(accounts.id, id));
-  if (account) await db.update(accounts).set({ linked: !account.linked }).where(eq(accounts.id, id));
+  if ((await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.handle, handle))).length > 0) return `${handle} ya está agregada.`;
+  const id = `${network === "instagram" ? "ig" : "fb"}-${handle.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase()}`.slice(0, 60);
+  await db.insert(accounts).values({ id, handle, network, brand: brand.trim().slice(0, 80) || handle.replace(/^@/, "") });
+  return null;
+}
+
+/** Disconnecting forgets the token. An account without pieces is removed; one with pieces stays, unconnected. */
+export async function removeAccount(id: string) {
+  const db = await getDb();
+  const used = await db.select({ id: pieces.id }).from(pieces).where(eq(pieces.accountId, id)).limit(1);
+  const usedInAgenda = await db.select({ id: agendaItems.id }).from(agendaItems).where(eq(agendaItems.accountId, id)).limit(1);
+  if (used.length === 0 && usedInAgenda.length === 0) {
+    await db.delete(accounts).where(eq(accounts.id, id));
+    return;
+  }
+  await db.update(accounts).set({ linked: false, tokenCipher: null, tokenExpiresAt: null, connectedAt: null }).where(eq(accounts.id, id));
+}
+
+/** After the owner authorized it: the account with its real name, picture and followers, and its encrypted token. */
+export async function saveInstagramConnection(profile: InstagramProfile, tokenCipher: string, expiresAt: Date, attachTo: string | null) {
+  const db = await getDb();
+  const values = {
+    handle: `@${profile.username.toLowerCase()}`, network: "instagram", externalId: profile.userId, avatarUrl: profile.avatarUrl, followers: profile.followers,
+    tokenCipher, tokenExpiresAt: expiresAt, connectedAt: new Date(), linked: true,
+  };
+  const [known] = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.externalId, profile.userId));
+  const [planned] = attachTo ? await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.id, attachTo)) : [];
+  const [sameName] = await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.handle, values.handle));
+  const target = known ?? planned ?? sameName;
+  if (target) {
+    await db.update(accounts).set(values).where(eq(accounts.id, target.id));
+  } else {
+    await db.insert(accounts).values({ id: `ig-${profile.userId}`, brand: profile.username, ...values });
+  }
 }
 
 export type BrandProfile = { website: string; voice: string; offer: string; audience: string; neverPromise: string; businessInfo: string };
@@ -106,7 +155,7 @@ export async function decideApproval(id: number, approved: boolean) {
 /** Entry of the pipeline: the gate first; what passes becomes an idea and, with a date, an item of the week. */
 export async function createRequest(request: Partial<Request>, scheduledOn?: string) {
   const db = await getDb();
-  const verdict = checkRequest(request, await db.select().from(accounts));
+  const verdict = checkRequest(request, await db.select(accountColumns).from(accounts));
   if (!verdict.ok) return verdict;
   const { account, format, title, manual } = verdict;
   const [piece] = await db

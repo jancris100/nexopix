@@ -1,9 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, useTransition, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
-import { addPublication, advance, decide, saveProfile, toggleAccount, toggleAgent, toggleItem } from "../../app/panel/actions";
+import { addAccount, addPublication, advance, decide, removeAccount, saveProfile, toggleAgent, toggleItem } from "../../app/panel/actions";
 import { addDays } from "../../lib/dates";
 import { morningSummary, trackedLink } from "../../lib/insights";
 import type { Snapshot } from "../../lib/panel";
@@ -59,6 +60,11 @@ function animate(update: () => void, kind: "move" | "page" = "move") {
 export default function PanelApp({ initial }: { initial: Snapshot }) {
   const [snap, setSnap] = useState(initial);
   const [view, setView] = useState<View>("team");
+
+  // Back from Instagram: open the networks screen, where the result of the connection is shown.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("red")) setView("networks");
+  }, []);
   const [day, setDay] = useState(snap.today);
   const [sheet, setSheet] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -96,7 +102,7 @@ export default function PanelApp({ initial }: { initial: Snapshot }) {
       <div className="np-page">
         <header className="np-top">
           <h1>{TABS.find((tab) => tab.id === view)?.title}</h1>
-          {snap.isTest && <p className="np-test">Datos de prueba</p>}
+          {snap.isTest && <p className="np-test">Base temporal</p>}
           <button type="button" className="np-btn np-btn--go" onClick={() => setSheet(true)}>Nueva petición</button>
         </header>
 
@@ -129,7 +135,7 @@ export default function PanelApp({ initial }: { initial: Snapshot }) {
           </section>
         )}
 
-        {view === "networks" && <Networks snap={snap} busy={busy} onToggle={(id) => run(() => toggleAccount(id))} onSaved={(next) => animate(() => setSnap(next))} />}
+        {view === "networks" && <Networks snap={snap} busy={busy} onRemove={(id) => run(() => removeAccount(id))} onSaved={(next) => animate(() => setSnap(next))} />}
 
         {view === "results" && <Results snap={snap} accountOf={accountOf} />}
       </div>
@@ -262,41 +268,149 @@ function Team({ snap, busy, accountOf, onAdvance, onDecide, onToggleAgent }: { s
             {group.items.map(row)}
           </section>
         ))}
-        {shown.length === 0 && <p className="np-note">Este agente no tiene piezas ahora.</p>}
+        {shown.length === 0 && <p className="np-note">{focus ? "Este agente no tiene piezas ahora." : "Todavía no hay piezas. Agrega una red y crea una petición."}</p>}
       </div>
       <p className="np-note np-rule">Ningún agente publica ni gasta sin tu aprobación.</p>
     </>
   );
 }
 
-function Networks({ snap, busy, onToggle, onSaved }: { snap: Snapshot; busy: boolean; onToggle: (id: string) => void; onSaved: (snapshot: Snapshot) => void }) {
+const CONNECT_NOTICES: Record<string, { tone: "ok" | "warn"; text: string }> = {
+  conectada: { tone: "ok", text: "Cuenta de Instagram conectada." },
+  cancelada: { tone: "warn", text: "Cancelaste la conexión en Instagram. No se guardó nada." },
+  vencida: { tone: "warn", text: "La conexión tardó demasiado o no coincide. Vuelve a intentarlo." },
+  "no-profesional": { tone: "warn", text: "Esa cuenta no es profesional. Cámbiala a cuenta de empresa o de creador en Instagram y vuelve a conectarla." },
+  "falta-app": { tone: "warn", text: "Falta configurar la app de Meta en el servidor (INSTAGRAM_APP_ID e INSTAGRAM_APP_SECRET)." },
+  "falta-seguridad": { tone: "warn", text: "Para conectar cuentas reales el panel necesita contraseña y clave de cifrado (NEXOPIX_PANEL_PASSWORD y NEXOPIX_SECRET)." },
+  "falta-base": { tone: "warn", text: "Para conectar cuentas reales hace falta la base de datos permanente (DATABASE_URL)." },
+  error: { tone: "warn", text: "Instagram no completó la conexión. Vuelve a intentarlo en unos minutos." },
+};
+
+function Networks({ snap, busy, onRemove, onSaved }: { snap: Snapshot; busy: boolean; onRemove: (id: string) => void; onSaved: (snapshot: Snapshot) => void }) {
   const [open, setOpen] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("red");
+    if (code) {
+      setNotice(code);
+      window.history.replaceState(null, "", "/panel");
+    }
+  }, []);
+
+  const message = notice ? CONNECT_NOTICES[notice] : null;
   return (
     <section aria-label="Redes" className="np-rows">
+      {message && <p className={`np-notice np-notice--${message.tone}`} role="status">{message.text}</p>}
+      <div className="nets-head">
+        <p className="np-note">{snap.accounts.length === 0 ? "Todavía no agregaste ninguna red." : `${snap.accounts.length} ${snap.accounts.length === 1 ? "red" : "redes"}`}</p>
+        <button type="button" className="np-btn np-btn--go" onClick={() => setAdding(true)}>Agregar red</button>
+      </div>
+      {snap.accounts.length === 0 && (
+        <div className="empty">
+          <h2>Conecta tu primera red</h2>
+          <p>Con Instagram conectado, el equipo puede publicar por ti cuando apruebes. También puedes agregar una cuenta sin conectarla para ir planificando.</p>
+          <button type="button" className="np-btn np-btn--go" onClick={() => setAdding(true)}>Agregar red</button>
+        </div>
+      )}
       {snap.accounts.map((account) => {
         const complete = PROFILE_FIELDS.every((field) => account[field.key].trim());
         const expanded = open === account.id;
         return (
           <article key={account.id} className="net">
             <div className="net__row">
-              <span className={`net__tile net__tile--${account.network}`} aria-hidden="true">{account.handle.replace("@", "").charAt(0).toUpperCase()}</span>
+              {account.avatarUrl ? (
+                <Image className="net__avatar" src={account.avatarUrl} alt="" width={42} height={42} unoptimized />
+              ) : (
+                <span className={`net__tile net__tile--${account.network}`} aria-hidden="true">{account.handle.replace("@", "").charAt(0).toUpperCase()}</span>
+              )}
               <div className="net__text">
                 <strong>{account.handle}</strong>
-                <small>{`${account.network === "instagram" ? "Instagram" : "Facebook"}, ${account.brand}`}</small>
+                <small>{`${account.network === "instagram" ? "Instagram" : "Facebook"}${account.linked ? ", conectada" : ", sin conectar"}${account.followers != null ? `, ${account.followers.toLocaleString("es-CR")} seguidores` : ""}`}</small>
               </div>
               <p className="net__stat"><b>{snap.agenda.filter((item) => item.accountId === account.id).length}</b> esta semana</p>
               <p className={`net__flag${complete ? " is-ok" : ""}`}>{complete ? "Perfil listo" : "Falta el perfil"}</p>
               <div className="net__act">
                 <button type="button" className="np-btn" aria-expanded={expanded} onClick={() => animate(() => setOpen(expanded ? null : account.id))}>{expanded ? "Cerrar perfil" : "Ver perfil"}</button>
-                <button type="button" className={`np-btn${account.linked ? "" : " np-btn--go"}`} disabled={busy} onClick={() => onToggle(account.id)}>{account.linked ? "Desconectar" : "Conectar con Meta"}</button>
+                {!account.linked && account.network === "instagram" && <a className="np-btn np-btn--go" href={`/api/meta/connect?cuenta=${encodeURIComponent(account.id)}`}>Conectar</a>}
+                <button type="button" className="np-btn" disabled={busy} onClick={() => onRemove(account.id)}>{account.linked ? "Desconectar" : "Quitar"}</button>
               </div>
             </div>
             {expanded && <Profile account={account} onSaved={onSaved} />}
           </article>
         );
       })}
-      <p className="np-note">Seguidores y alcance aparecen al conectar cada cuenta. Por ahora la conexión es simulada.</p>
+      {adding && <AddNetwork canConnect={snap.canConnect} onClose={() => setAdding(false)} onSaved={(next) => { setAdding(false); onSaved(next); }} />}
     </section>
+  );
+}
+
+function AddNetwork({ canConnect, onClose, onSaved }: { canConnect: boolean; onClose: () => void; onSaved: (snapshot: Snapshot) => void }) {
+  const [network, setNetwork] = useState("instagram");
+  const [name, setName] = useState("");
+  const [brand, setBrand] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, start] = useTransition();
+
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [onClose]);
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    start(async () => {
+      try {
+        const result = await addAccount(network, name, brand);
+        if (result.snapshot) onSaved(result.snapshot);
+        else setError(result.error ?? "No se agregó la red.");
+      } catch {
+        setError("No se agregó la red. Revisa la conexión y vuelve a intentarlo.");
+      }
+    });
+  };
+
+  return (
+    <div className="np-scrim">
+      <form role="dialog" aria-modal="true" aria-label="Agregar red" className="sheet" onSubmit={submit}>
+        <div className="sheet__head">
+          <AgentMark agent="enrutador" size={44} />
+          <div>
+            <h2>Agregar red</h2>
+            <p>Conecta Instagram para publicar, o agrega la cuenta para planificar.</p>
+          </div>
+          <button type="button" className="sheet__close" aria-label="Cerrar" onClick={onClose}>×</button>
+        </div>
+        <a className={`connect${canConnect ? "" : " is-off"}`} href="/api/meta/connect" aria-disabled={!canConnect}>
+          <span className="net__tile net__tile--instagram" aria-hidden="true">I</span>
+          <span>
+            <strong>Conectar con Instagram</strong>
+            <small>{canConnect ? "Inicias sesión en Instagram y autorizas a Nexopix a publicar." : "Disponible cuando el servidor tenga la app de Meta, la base y la contraseña."}</small>
+          </span>
+        </a>
+        <p className="sheet__or">o agrégala sin conectar</p>
+        <fieldset>
+          <legend>Red</legend>
+          <div className="choices">
+            {[["instagram", "Instagram"], ["facebook", "Página de Facebook"]].map(([id, label]) => (
+              <button key={id} type="button" className={network === id ? "is-on" : ""} aria-pressed={network === id} onClick={() => setNetwork(id)}>{label}</button>
+            ))}
+          </div>
+        </fieldset>
+        <label>
+          {network === "instagram" ? "Usuario de Instagram" : "Nombre de la página"}
+          <input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder={network === "instagram" ? "@tu.marca" : ""} autoComplete="off" />
+        </label>
+        <label>
+          Marca
+          <input value={brand} onChange={(event) => setBrand(event.target.value)} maxLength={80} />
+        </label>
+        {error && <p className="np-alert" role="alert">{error}</p>}
+        <button type="submit" className="np-btn np-btn--wide" disabled={saving}>Agregar sin conectar</button>
+      </form>
+    </div>
   );
 }
 
@@ -385,7 +499,7 @@ function Results({ snap, accountOf }: { snap: Snapshot; accountOf: (id: string) 
         })}
         {rows.length === 0 && <p className="np-note">Cuando publiques una pieza, aquí verás qué trajo.</p>}
       </section>
-      {snap.isTest && <p className="np-note">Estas cifras son de prueba. Las reales llegan al conectar las redes.</p>}
+      <p className="np-note">Las cifras llegan de las redes conectadas.</p>
     </section>
   );
 }
@@ -452,7 +566,8 @@ function NewRequest({ snap, date, onClose, onSaved }: { snap: Snapshot; date: st
           </div>
         </fieldset>
         {error && <p className="np-alert" role="alert">{error}</p>}
-        <button type="submit" className="np-btn np-btn--go np-btn--wide" disabled={saving}>Enviar al equipo</button>
+        {snap.accounts.length === 0 && <p className="np-alert" role="alert">Primero agrega una red en la pestaña Redes.</p>}
+        <button type="submit" className="np-btn np-btn--go np-btn--wide" disabled={saving || snap.accounts.length === 0}>Enviar al equipo</button>
       </form>
     </div>
   );

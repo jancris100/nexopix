@@ -1,0 +1,8 @@
+.login { display: grid; place-items: center; min-height: 100vh; padding: 16px; }
+.login__card { display: grid; gap: 16px; width: 100%; max-width: 380px; padding: 28px; border: 1px solid var(--hair); border-radius: 18px; background: var(--card); }
+.login__card h1 { font-size: 26px; }
+.login__card label { display: grid; gap: 6px; color: var(--graphite); font-size: 14px; font-weight: 500; }
+.login__card input { height: 46px; padding: 0 12px; border: 1px solid var(--hair-2); border-radius: 10px; font: 16px var(--sans); }
+.login__card input:focus { border-color: var(--ink); outline: none; }
+.login__card button { min-height: 46px; border: 0; border-radius: 10px; background: var(--ink); color: #fff; font: 600 15px var(--sans); cursor: pointer; }
+.login__error { color: #8f1d1d; font-size: 14px; }

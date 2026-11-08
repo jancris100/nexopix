@@ -21,8 +21,11 @@ Sin `DATABASE_URL` el panel usa un Postgres embebido (`.data/`) con datos de pru
 
 | Variable | Para qué |
 | --- | --- |
-| `DATABASE_URL` | Base en Neon. Prepárala una vez con `npm run db:setup`. |
+| `DATABASE_URL` | Base en Neon. Las migraciones se aplican solas en cada despliegue. |
 | `NEXOPIX_API_KEY` | Habilita `POST /api/peticiones` (encabezado `x-api-key`). |
+| `NEXOPIX_PANEL_PASSWORD` | Contraseña del panel. Sin ella el panel queda abierto y no se pueden conectar redes reales. |
+| `NEXOPIX_SECRET` | Clave de al menos 32 caracteres: firma la sesión y cifra los permisos de las redes. |
+| `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | App de Meta con Instagram Login. Redirección: `https://<dominio>/api/meta/callback`. |
 
 ## En el teléfono
 

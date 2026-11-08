@@ -13,6 +13,14 @@ export const accounts = pgTable("accounts", {
   audience: text("audience").notNull().default(""),
   neverPromise: text("never_promise").notNull().default(""),
   businessInfo: text("business_info").notNull().default(""),
+  /** The network's own id of the account, once connected. */
+  externalId: text("external_id").unique(),
+  avatarUrl: text("avatar_url"),
+  followers: integer("followers"),
+  /** Access token, encrypted with NEXOPIX_SECRET. Never leaves the server. */
+  tokenCipher: text("token_cipher"),
+  tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
+  connectedAt: timestamp("connected_at", { withTimezone: true }),
 });
 
 export const agents = pgTable("agents", {
