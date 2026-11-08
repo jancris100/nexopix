@@ -5,7 +5,7 @@ import { addDays, isDate, mondayOf, todayInCostaRica } from "./dates";
 import { normalizeHandle } from "./handles";
 import type { InstagramProfile } from "./instagram";
 import { mediaInsights, metaConfig, recentMedia } from "./instagram";
-import { checkRequest, FORMATS, type Request } from "./portero";
+import { checkRequest, FORMATS, formatsFor, stateOf, type Request } from "./portero";
 import { canEncrypt, decrypt } from "./secure";
 import { isProtected } from "./session";
 
@@ -168,19 +168,72 @@ export async function decideApproval(id: number, approved: boolean) {
 }
 
 /** Entry of the pipeline: the gate first; what passes becomes an idea and, with a date, an item of the week. */
+/**
+ * The Portero receives a request and keeps it: checked with fixed rules, stored with what it carried, and never twice
+ * for the same reference of the same sender.
+ */
 export async function createRequest(request: Partial<Request>, scheduledOn?: string) {
   const db = await getDb();
   const verdict = checkRequest(request, await db.select(accountColumns).from(accounts));
   if (!verdict.ok) return verdict;
-  const { account, format, title, manual } = verdict;
-  const [piece] = await db
-    .insert(pieces)
-    .values({ pipeline: FORMATS[format].pipeline, title, format, accountId: account.id, scene: account.scene })
-    .returning({ id: pieces.id });
-  if (scheduledOn) {
-    await db.insert(agendaItems).values({ scheduledOn, time: "12:00", title, format, accountId: account.id });
+  const { account, format, title, manual, brief } = verdict;
+  const origin = brief.origen ?? (brief.referencia ? "api" : null);
+
+  if (brief.referencia) {
+    const [known] = await db
+      .select({ id: pieces.id, stage: pieces.stage })
+      .from(pieces)
+      .where(and(eq(pieces.origin, origin!), eq(pieces.externalRef, brief.referencia)));
+    if (known) return { ok: true as const, pieceId: known.id, manual, duplicate: true, state: stateOf(known.stage) };
   }
-  return { ok: true as const, pieceId: piece.id, manual };
+
+  const day = brief.fecha ?? scheduledOn;
+  const pieceId = await db.transaction(async (tx) => {
+    const [piece] = await tx
+      .insert(pieces)
+      .values({ pipeline: FORMATS[format].pipeline, title, format, accountId: account.id, scene: account.scene, origin, externalRef: brief.referencia, brief: { ...brief, origen: origin } })
+      .returning({ id: pieces.id });
+    if (day) await tx.insert(agendaItems).values({ scheduledOn: day, time: "12:00", title, format, accountId: account.id });
+    return piece.id;
+  });
+  return { ok: true as const, pieceId, manual, duplicate: false, state: stateOf(0) };
+}
+
+/** What another system may read of a piece: where it is and, once published, where to see it. */
+export async function requestStatus(lookup: { id?: number; origin?: string; reference?: string }) {
+  const db = await getDb();
+  const where =
+    lookup.id !== undefined
+      ? eq(pieces.id, lookup.id)
+      : lookup.reference
+        ? and(eq(pieces.origin, lookup.origin || "api"), eq(pieces.externalRef, lookup.reference))
+        : undefined;
+  if (!where) return null;
+  const [piece] = await db
+    .select({ id: pieces.id, stage: pieces.stage, title: pieces.title, format: pieces.format, accountId: pieces.accountId, origin: pieces.origin, externalRef: pieces.externalRef, permalink: pieces.permalink, createdAt: pieces.createdAt })
+    .from(pieces)
+    .where(where);
+  if (!piece) return null;
+  const [owner] = await db.select({ handle: accounts.handle, network: accounts.network }).from(accounts).where(eq(accounts.id, piece.accountId));
+  return {
+    id: piece.id,
+    estado: stateOf(piece.stage),
+    objetivo: piece.title,
+    formato: piece.format,
+    cuenta: owner?.handle ?? null,
+    red: owner?.network ?? null,
+    origen: piece.origin,
+    referencia: piece.externalRef,
+    enlace: piece.permalink,
+    recibida: piece.createdAt.toISOString(),
+  };
+}
+
+/** The accounts a sender may choose from, with the formats each network takes. Never tokens. */
+export async function publicAccounts() {
+  const db = await getDb();
+  const rows = await db.select({ id: accounts.id, handle: accounts.handle, network: accounts.network, brand: accounts.brand, linked: accounts.linked }).from(accounts).orderBy(asc(accounts.handle));
+  return rows.map((row) => ({ id: row.id, cuenta: row.handle, red: row.network, marca: row.brand, conectada: row.linked, formatos: formatsFor(row.network) }));
 }
 
 /** The connected Instagram accounts with their opened token: server only, never sent to the screen. */

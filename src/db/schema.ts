@@ -1,4 +1,5 @@
-import { boolean, date, index, integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import type { Brief } from "../lib/portero";
 
 export const accounts = pgTable("accounts", {
   id: text("id").primaryKey(),
@@ -43,8 +44,14 @@ export const pieces = pgTable(
     accountId: text("account_id").notNull().references(() => accounts.id),
     scene: integer("scene").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Who asked for it from outside (for instance intenexo) and with which id of theirs. */
+    origin: text("origin"),
+    externalRef: text("external_ref"),
+    /** What the request carried once checked: product, files, desired date and notes. */
+    brief: jsonb("brief").$type<Brief>(),
+    permalink: text("permalink"),
   },
-  (table) => [index("pieces_pipeline_stage").on(table.pipeline, table.stage)],
+  (table) => [index("pieces_pipeline_stage").on(table.pipeline, table.stage), uniqueIndex("pieces_origin_ref").on(table.origin, table.externalRef)],
 );
 
 export const agendaItems = pgTable(
