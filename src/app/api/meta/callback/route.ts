@@ -20,7 +20,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const { token, expiresAt } = await exchangeCode(config, request.nextUrl.origin, code);
-    const accounts = await assignedAccounts(token);
+    const { accounts, note } = await assignedAccounts(token, config);
+    console.log("Instagram accounts found", accounts.length, JSON.stringify(note));
     if (accounts.length === 0) return back("sin-cuentas");
     const sealed = encrypt(token);
     for (const [index, account] of accounts.entries()) {
