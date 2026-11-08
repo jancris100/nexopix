@@ -5,7 +5,7 @@ import { addDays, isDate, mondayOf, todayInCostaRica } from "./dates";
 import { normalizeHandle } from "./handles";
 import type { InstagramProfile } from "./instagram";
 import { mediaInsights, metaConfig, recentMedia } from "./instagram";
-import { checkRequest, FORMATS, formatsFor, stateOf, type Request } from "./portero";
+import { checkRequest, FORMATS, formatsFor, statusOf, type Request } from "./gatekeeper";
 import { canEncrypt, decrypt } from "./secure";
 import { isProtected } from "./session";
 
@@ -79,9 +79,9 @@ export async function toggleAgent(id: string) {
 /** An account planned by hand: it can receive pieces and be connected later. Returns the reason when it can't. */
 export async function addAccount(network: string, name: string, brand: string) {
   const handle = normalizeHandle(network, name);
-  if (!handle) return network === "instagram" ? "Escribe el usuario de Instagram: letras, números, punto o guion bajo." : "Escribe el nombre de la página.";
+  if (!handle) return { code: network === "instagram" ? ("instagram_handle" as const) : ("page_name" as const) };
   const db = await getDb();
-  if ((await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.handle, handle))).length > 0) return `${handle} ya está agregada.`;
+  if ((await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.handle, handle))).length > 0) return { code: "duplicate" as const, handle };
   const id = `${network === "instagram" ? "ig" : "fb"}-${handle.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase()}`.slice(0, 60);
   await db.insert(accounts).values({ id, handle, network, brand: brand.trim().slice(0, 80) || handle.replace(/^@/, "") });
   return null;
@@ -125,7 +125,7 @@ const LIMITS: Record<keyof BrandProfile, number> = { website: 200, voice: 400, o
 export async function saveBrandProfile(id: string, profile: BrandProfile) {
   const clean = Object.fromEntries((Object.keys(LIMITS) as (keyof BrandProfile)[]).map((key) => [key, String(profile[key] ?? "").trim().slice(0, LIMITS[key])])) as BrandProfile;
   if (clean.website && !/^https:\/\/[^\s]+\.[^\s]+$/.test(clean.website)) {
-    return "El sitio web debe empezar con https://";
+    return "website_invalid" as const;
   }
   const db = await getDb();
   await db.update(accounts).set(clean).where(eq(accounts.id, id));
@@ -141,7 +141,7 @@ export async function advancePiece(id: number) {
     const stage = piece.stage + 1;
     await tx.update(pieces).set({ stage }).where(eq(pieces.id, id));
     if (stage === REVIEW) {
-      await tx.insert(approvals).values({ pieceId: id, agent: piece.pipeline === "ads" ? "Estratega" : "Programador" });
+      await tx.insert(approvals).values({ pieceId: id, agent: piece.pipeline === "ads" ? "strategist" : "scheduler" });
     }
   });
 }
@@ -176,36 +176,36 @@ export async function createRequest(request: Partial<Request>, scheduledOn?: str
   const verdict = checkRequest(request, await db.select(accountColumns).from(accounts));
   if (!verdict.ok) return verdict;
   const { account, format, title, manual, brief } = verdict;
-  const origin = brief.origen ?? (brief.referencia ? "api" : null);
+  const source = brief.source ?? (brief.reference ? "api" : null);
 
-  if (brief.referencia) {
+  if (brief.reference) {
     const [known] = await db
       .select({ id: pieces.id, stage: pieces.stage })
       .from(pieces)
-      .where(and(eq(pieces.origin, origin!), eq(pieces.externalRef, brief.referencia)));
-    if (known) return { ok: true as const, pieceId: known.id, manual, duplicate: true, state: stateOf(known.stage) };
+      .where(and(eq(pieces.origin, source!), eq(pieces.externalRef, brief.reference)));
+    if (known) return { ok: true as const, pieceId: known.id, manual, duplicate: true, status: statusOf(known.stage) };
   }
 
-  const day = brief.fecha ?? scheduledOn;
+  const day = brief.publishOn ?? scheduledOn;
   const pieceId = await db.transaction(async (tx) => {
     const [piece] = await tx
       .insert(pieces)
-      .values({ pipeline: FORMATS[format].pipeline, title, format, accountId: account.id, scene: account.scene, origin, externalRef: brief.referencia, brief: { ...brief, origen: origin } })
+      .values({ pipeline: FORMATS[format].pipeline, title, format, accountId: account.id, scene: account.scene, origin: source, externalRef: brief.reference, brief: { ...brief, source } })
       .returning({ id: pieces.id });
     if (day) await tx.insert(agendaItems).values({ scheduledOn: day, time: "12:00", title, format, accountId: account.id });
     return piece.id;
   });
-  return { ok: true as const, pieceId, manual, duplicate: false, state: stateOf(0) };
+  return { ok: true as const, pieceId, manual, duplicate: false, status: statusOf(0) };
 }
 
 /** What another system may read of a piece: where it is and, once published, where to see it. */
-export async function requestStatus(lookup: { id?: number; origin?: string; reference?: string }) {
+export async function requestStatus(lookup: { id?: number; source?: string; reference?: string }) {
   const db = await getDb();
   const where =
     lookup.id !== undefined
       ? eq(pieces.id, lookup.id)
       : lookup.reference
-        ? and(eq(pieces.origin, lookup.origin || "api"), eq(pieces.externalRef, lookup.reference))
+        ? and(eq(pieces.origin, lookup.source || "api"), eq(pieces.externalRef, lookup.reference))
         : undefined;
   if (!where) return null;
   const [piece] = await db
@@ -216,15 +216,15 @@ export async function requestStatus(lookup: { id?: number; origin?: string; refe
   const [owner] = await db.select({ handle: accounts.handle, network: accounts.network }).from(accounts).where(eq(accounts.id, piece.accountId));
   return {
     id: piece.id,
-    estado: stateOf(piece.stage),
-    objetivo: piece.title,
-    formato: piece.format,
-    cuenta: owner?.handle ?? null,
-    red: owner?.network ?? null,
-    origen: piece.origin,
-    referencia: piece.externalRef,
-    enlace: piece.permalink,
-    recibida: piece.createdAt.toISOString(),
+    status: statusOf(piece.stage),
+    goal: piece.title,
+    format: piece.format,
+    account: owner?.handle ?? null,
+    network: owner?.network ?? null,
+    source: piece.origin,
+    reference: piece.externalRef,
+    permalink: piece.permalink,
+    receivedAt: piece.createdAt.toISOString(),
   };
 }
 
@@ -232,7 +232,7 @@ export async function requestStatus(lookup: { id?: number; origin?: string; refe
 export async function publicAccounts() {
   const db = await getDb();
   const rows = await db.select({ id: accounts.id, handle: accounts.handle, network: accounts.network, brand: accounts.brand, linked: accounts.linked }).from(accounts).orderBy(asc(accounts.handle));
-  return rows.map((row) => ({ id: row.id, cuenta: row.handle, red: row.network, marca: row.brand, conectada: row.linked, formatos: formatsFor(row.network) }));
+  return rows.map((row) => ({ id: row.id, handle: row.handle, network: row.network, brand: row.brand, connected: row.linked, formats: formatsFor(row.network) }));
 }
 
 /** The connected Instagram accounts with their opened token: server only, never sent to the screen. */
@@ -257,12 +257,12 @@ export async function instagramPosts() {
   const linked = await connectedInstagram();
   const settled = await Promise.all(
     linked.map(async (account) => {
-      if (account.expired) return { posts: [], problem: `${account.handle}: el permiso venció, vuelve a conectarla en Redes.` };
+      if (account.expired) return { posts: [], problem: { handle: account.handle, kind: "expired" as const } };
       try {
         return { posts: await recentMedia(account.userId, account.token, account.id), problem: null };
       } catch (error) {
         console.error("Instagram media failed", account.id, error instanceof Error ? error.message : error);
-        return { posts: [], problem: `${account.handle}: Instagram no entregó las publicaciones.` };
+        return { posts: [], problem: { handle: account.handle, kind: "failed" as const } };
       }
     }),
   );
@@ -273,8 +273,8 @@ export async function instagramPosts() {
 }
 
 export async function instagramPostInsights(accountId: string, mediaId: string) {
-  if (!/^\d+$/.test(mediaId)) return { insights: null, reason: "no-disponible" };
+  if (!/^\d+$/.test(mediaId)) return { insights: null, reason: "unavailable" };
   const [account] = await connectedInstagram(accountId);
-  if (!account) return { insights: null, reason: "sin-cuenta" };
+  if (!account) return { insights: null, reason: "no-account" };
   return mediaInsights(mediaId, account.token);
 }

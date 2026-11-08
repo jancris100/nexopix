@@ -1,6 +1,9 @@
 "use server";
 
 import { isDate } from "../../lib/dates";
+import { dictionaryFor } from "../../i18n/dictionaries";
+import { issueMessage } from "../../i18n/issues";
+import { getLocale } from "../../i18n/server";
 import * as panel from "../../lib/panel";
 
 export async function weekAgenda(weekStart: string) {
@@ -26,8 +29,10 @@ export async function toggleAgent(id: string) {
 }
 
 export async function addAccount(network: string, name: string, brand: string) {
-  const error = await panel.addAccount(network, name, brand);
-  return error ? { error } : { snapshot: await panel.loadPanel() };
+  const refusal = await panel.addAccount(network, name, brand);
+  if (!refusal) return { snapshot: await panel.loadPanel() };
+  const errors = dictionaryFor(await getLocale()).addNetwork.errors;
+  return { error: refusal.code === "duplicate" ? errors.duplicate(refusal.handle) : errors[refusal.code] };
 }
 
 export async function removeAccount(id: string) {
@@ -46,14 +51,14 @@ export async function decide(id: number, approved: boolean) {
 }
 
 export async function saveProfile(id: string, profile: panel.BrandProfile) {
-  const error = await panel.saveBrandProfile(id, profile);
-  return error ? { error } : { snapshot: await panel.loadPanel() };
+  const refusal = await panel.saveBrandProfile(id, profile);
+  return refusal ? { error: dictionaryFor(await getLocale()).profile.websiteInvalid } : { snapshot: await panel.loadPanel() };
 }
 
 export async function addPublication(input: { title: string; format: string; accountId: string; network: string; date: string }) {
   const result = await panel.createRequest(
-    { cuenta: input.accountId, red: input.network, formato: input.format, objetivo: input.title },
+    { account: input.accountId, network: input.network, format: input.format, goal: input.title },
     isDate(input.date) ? input.date : undefined,
   );
-  return result.ok ? { snapshot: await panel.loadPanel() } : { error: result.reason };
+  return result.ok ? { snapshot: await panel.loadPanel() } : { error: issueMessage(result.issue, await getLocale()) };
 }

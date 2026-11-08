@@ -22,7 +22,7 @@ Sin `DATABASE_URL` el panel usa un Postgres embebido (`.data/`) con datos de pru
 | Variable | Para qué |
 | --- | --- |
 | `DATABASE_URL` | Base en Neon. Las migraciones se aplican solas en cada despliegue. |
-| `NEXOPIX_API_KEY` | Habilita la API para otros sistemas (encabezado `x-api-key`): `GET /api/cuentas`, `POST /api/peticiones`, `GET /api/peticiones/{id}` y `GET /api/peticiones?origen=&referencia=`. La misma `referencia` no crea dos piezas. Documentación completa en `/docs`. |
+| `NEXOPIX_API_KEY` | Habilita la API para otros sistemas (encabezado `x-api-key`): `GET /api/accounts`, `POST /api/requests`, `GET /api/requests/{id}` y `GET /api/requests?source=&reference=`. La API siempre está en inglés; los mensajes de error salen en español con `accept-language: es`. Documentación completa en `/docs`. |
 | `NEXOPIX_PANEL_PASSWORD` | Contraseña del panel. Sin ella el panel queda abierto y no se pueden conectar redes reales. |
 | `NEXOPIX_SECRET` | Clave de al menos 32 caracteres: firma la sesión y cifra los permisos de las redes. |
 | `META_APP_SECRET` | Clave secreta de la app de Meta (inicio de sesión unificado de Instagram). El ID de la app y el de la configuración ya vienen en el código; se cambian con `META_APP_ID` y `META_CONFIG_ID`. Redirección: `https://<dominio>/api/meta/callback`. |
@@ -37,3 +37,7 @@ la web y la app por igual, y las notificaciones de "Te toca decidir".
 npm test             # reglas del Portero y fechas
 npm run db:generate  # migración tras cambiar src/db/schema.ts
 ```
+
+## Idiomas
+
+La interfaz está en inglés y en español (selector EN/ES, guardado en la cookie `np_lang`). Los textos viven en `src/i18n/dictionaries.ts` y la documentación de la API en `src/app/docs/content.ts`; una prueba revisa que los dos idiomas tengan las mismas claves. Todo código, campo y estado interno va en inglés.

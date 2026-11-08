@@ -1,16 +1,11 @@
 import Link from "next/link";
 import { Logo } from "../components/panel/Marks";
+import { LanguageSwitch } from "../i18n/client";
+import { getDictionary } from "../i18n/server";
 
-const steps = [
-  { name: "Entra una petición", text: "Por API, WhatsApp o el panel, con la cuenta, la red, el formato y el archivo." },
-  { name: "El Portero la revisa", text: "Comprueba cuenta, formato y archivos con reglas fijas. Si algo no cumple, dice por qué." },
-  { name: "El equipo la prepara", text: "Escribe con el tono de cada marca y deja la pieza lista para cada red." },
-  { name: "Tú decides", text: "Nada se publica sin tu aprobación. Rechazar la devuelve a producción.", human: true },
-  { name: "Sale publicada", text: "Por API en Instagram y Facebook. Lo que no tiene API pasa a ser una tarea." },
-  { name: "Sabes qué funcionó", text: "Cada enlace lleva su marca y el resumen diario dice qué pieza trajo consultas." },
-];
-
-export default function Home() {
+export default async function Home() {
+  const t = await getDictionary();
+  const [gate, writer, human, publisher] = t.home.previewChain;
   return (
     <main className="site">
       <header className="wrap site__bar">
@@ -18,40 +13,41 @@ export default function Home() {
           <Logo size={30} />
           Nexopix
         </Link>
-        <nav className="site__links"><Link href="/docs">API</Link><Link href="/panel" className="btn btn--quiet">Abrir el panel</Link></nav>
+        <nav className="site__links">
+          <LanguageSwitch />
+          <Link href="/docs">{t.common.api}</Link>
+          <Link href="/panel" className="btn btn--quiet">{t.common.openPanel}</Link>
+        </nav>
       </header>
 
       <section className="wrap hero">
         <div>
-          <h1>Un equipo de agentes que publica por ti, con tu aprobación.</h1>
-          <p className="hero__lead">
-            Nexopix conecta tus sistemas con Instagram y Facebook. Los agentes revisan, escriben y preparan cada pieza;
-            tú ves todo el recorrido y das el último sí.
-          </p>
+          <h1>{t.home.headline}</h1>
+          <p className="hero__lead">{t.home.lead}</p>
           <div className="hero__actions">
-            <Link href="/panel" className="btn">Ver la demostración</Link>
+            <Link href="/panel" className="btn">{t.home.demo}</Link>
           </div>
         </div>
-        <div className="preview" aria-label="Ejemplo de una pieza esperando aprobación">
+        <div className="preview" aria-label={t.home.previewLabel}>
           <p className="preview__chain">
-            <span>Portero</span><i /><span>Guionista</span><i /><span className="is-human">Tú</span><i /><span>Publicador</span>
+            <span>{gate}</span><i /><span>{writer}</span><i /><span className="is-human">{human}</span><i /><span>{publisher}</span>
           </p>
           <div className="preview__piece">
-            <strong>Reel: factura desde el celular</strong>
-            <small>Reel para @intenexo.cr, martes a las 10:00</small>
+            <strong>{t.home.previewTitle}</strong>
+            <small>{t.home.previewMeta}</small>
           </div>
-          <p className="preview__copy">“Facturar ya no es tarea de fin de mes. Hazlo desde el celular, en dos minutos, conectado con Hacienda.”</p>
+          <p className="preview__copy">{t.home.previewCopy}</p>
           <div className="preview__decide">
-            <p>Esperando tu decisión</p>
-            <div><b>Rechazar</b><b>Aprobar</b></div>
+            <p>{t.home.previewWaiting}</p>
+            <div><b>{t.team.reject}</b><b>{t.team.approve}</b></div>
           </div>
         </div>
       </section>
 
       <section className="wrap">
-        <h2 className="section-title">Cómo funciona</h2>
+        <h2 className="section-title">{t.home.howItWorks}</h2>
         <ol className="steps">
-          {steps.map((step) => (
+          {t.home.steps.map((step) => (
             <li key={step.name} className={step.human ? "is-human" : undefined}>
               <strong>{step.name}</strong>
               <span>{step.text}</span>
@@ -61,7 +57,7 @@ export default function Home() {
       </section>
 
       <footer className="wrap foot">
-        <p>Nexopix se conecta por API. INTENEXO es su primer cliente.</p>
+        <p>{t.home.footer}</p>
       </footer>
     </main>
   );

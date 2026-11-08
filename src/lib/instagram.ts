@@ -32,7 +32,7 @@ export function authorizeUrl(config: { appId: string; configId: string }, origin
 async function read(response: Response, step: string) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok || body.error) {
-    throw new Error(`Meta rechazó ${step}: ${body.error?.message ?? `respuesta ${response.status}`}`);
+    throw new Error(`Meta refused ${step}: ${body.error?.message ?? `status ${response.status}`}`);
   }
   return body;
 }
@@ -44,7 +44,7 @@ export async function exchangeCode(config: { appId: string; secret: string }, or
   url.searchParams.set("client_secret", config.secret);
   url.searchParams.set("redirect_uri", callbackUrl(origin));
   url.searchParams.set("code", code);
-  const body = await read(await fetch(url), "el código");
+  const body = await read(await fetch(url), "the code");
   const seconds = Number(body.expires_in) > 0 ? Number(body.expires_in) : DEFAULT_TOKEN_DAYS * 24 * 3600;
   return { token: String(body.access_token), expiresAt: new Date(Date.now() + seconds * 1000) };
 }
@@ -139,13 +139,13 @@ export async function recentMedia(userId: string, token: string, accountId: stri
   url.searchParams.set("fields", "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count");
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("access_token", token);
-  const body = await read(await fetch(url, { cache: "no-store" }), "las publicaciones");
+  const body = await read(await fetch(url, { cache: "no-store" }), "the posts");
   type Media = { id: string; caption?: string; media_type?: string; media_product_type?: string; media_url?: string; thumbnail_url?: string; permalink?: string; timestamp: string; like_count?: number; comments_count?: number };
   return ((body.data ?? []) as Media[]).map((media) => ({
     id: String(media.id),
     accountId,
     caption: media.caption ?? "",
-    kind: media.media_product_type === "REELS" ? "reel" : media.media_product_type === "STORY" ? "historia" : media.media_type === "CAROUSEL_ALBUM" ? "carrusel" : media.media_type === "VIDEO" ? "video" : "foto",
+    kind: media.media_product_type === "REELS" ? "reel" : media.media_product_type === "STORY" ? "story" : media.media_type === "CAROUSEL_ALBUM" ? "carousel" : media.media_type === "VIDEO" ? "video" : "photo",
     mediaUrl: media.media_type === "VIDEO" ? null : media.media_url ?? null,
     thumbnailUrl: media.thumbnail_url ?? null,
     permalink: media.permalink ?? null,
@@ -165,7 +165,7 @@ export async function mediaInsights(mediaId: string, token: string): Promise<{ i
   const body = await fetch(url, { cache: "no-store" }).then((response) => response.json()).catch(() => ({}));
   if (body.error || !Array.isArray(body.data)) {
     const message = String(body.error?.message ?? "");
-    return { insights: null, reason: /permission|instagram_manage_insights|\(#10\)|\(#200\)/i.test(message) ? "permiso" : "no-disponible" };
+    return { insights: null, reason: /permission|instagram_manage_insights|\(#10\)|\(#200\)/i.test(message) ? "permission" : "unavailable" };
   }
   const insights: PostInsights = {};
   for (const metric of body.data as { name: keyof PostInsights; values?: { value: number }[]; total_value?: { value: number } }[]) {

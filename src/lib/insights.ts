@@ -10,25 +10,22 @@ export function trackedLink(website: string, network: string, piece: { id: numbe
   const url = new URL(website);
   url.searchParams.set("utm_source", network);
   url.searchParams.set("utm_medium", piece.pipeline === "ads" ? "paid" : "social");
-  url.searchParams.set("utm_campaign", `pieza-${piece.id}`);
+  url.searchParams.set("utm_campaign", `piece-${piece.id}`);
   return url.toString();
 }
 
-const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
-
-/** The morning summary, in plain sentences. Only counts what is in the data: it never estimates. */
-export function morningSummary(pieces: readonly Piece[], results: readonly Result[], pendingToday: number) {
+/** The facts of the morning summary. Only counts what is in the data: it never estimates. The words are in the dictionaries. */
+export function summaryFacts(pieces: readonly Piece[], results: readonly Result[], pendingToday: number) {
   const clicks = results.reduce((total, result) => total + result.clicks, 0);
   const leads = results.reduce((total, result) => total + result.leads, 0);
   const best = [...results].sort((a, b) => b.leads - a.leads || b.clicks - a.clicks)[0];
   const bestPiece = best && best.leads > 0 ? pieces.find((piece) => piece.id === best.pieceId) : undefined;
-  const toApprove = pieces.filter((piece) => piece.stage === REVIEW).length;
-  const published = pieces.filter((piece) => piece.stage === PUBLISHED).length;
-
-  return [
-    `${plural(published, "pieza publicada", "piezas publicadas")}, con ${plural(clicks, "clic", "clics")} y ${plural(leads, "consulta", "consultas")}.`,
-    bestPiece ? `La que más consultas trajo: ${bestPiece.title}.` : "Todavía ninguna pieza trajo consultas.",
-    toApprove === 0 ? "No tienes nada por aprobar." : `Tienes ${plural(toApprove, "pieza", "piezas")} por aprobar.`,
-    pendingToday === 0 ? "Hoy no queda nada en la agenda." : `${pendingToday === 1 ? "Hoy queda" : "Hoy quedan"} ${plural(pendingToday, "tarea", "tareas")} en la agenda.`,
-  ];
+  return {
+    published: pieces.filter((piece) => piece.stage === PUBLISHED).length,
+    clicks,
+    leads,
+    best: bestPiece?.title ?? null,
+    toApprove: pieces.filter((piece) => piece.stage === REVIEW).length,
+    pendingToday,
+  };
 }

@@ -93,3 +93,8 @@
   .docs__main { gap: 48px; }
   .docs__main h2 { font-size: 24px; }
 }
+.docs__bar .lang { flex: none; }
+@media (max-width: 640px) {
+  .docs__panel { display: none; }
+  .docs__bar-in { justify-content: space-between; }
+}

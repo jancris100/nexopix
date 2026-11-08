@@ -1,4 +1,4 @@
-.login { display: grid; place-items: center; min-height: 100vh; padding: 16px; }
+.login { display: grid; place-items: center; align-content: center; gap: 16px; min-height: 100vh; padding: 16px; }
 .login__card { display: grid; gap: 16px; width: 100%; max-width: 380px; padding: 28px; border: 1px solid var(--hair); border-radius: 18px; background: var(--card); }
 .login__card h1 { font-size: 26px; }
 .login__card label { display: grid; gap: 6px; color: var(--graphite); font-size: 14px; font-weight: 500; }

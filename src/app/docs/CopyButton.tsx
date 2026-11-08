@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 /** Copies an example as it is shown, so it can be pasted in a terminal or in code. */
-export default function CopyButton({ text }: { text: string }) {
+export default function CopyButton({ text, label, done }: { text: string; label: string; done: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -16,7 +16,7 @@ export default function CopyButton({ text }: { text: string }) {
   };
   return (
     <button type="button" className="code__copy" onClick={copy} aria-live="polite">
-      {copied ? "Copiado" : "Copiar"}
+      {copied ? done : label}
     </button>
   );
 }

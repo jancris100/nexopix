@@ -22,16 +22,32 @@ export function weekNumber(firstWeek: string, weekStart: string) {
   return Math.round(days / 7) + 1;
 }
 
-const dayMonth = new Intl.DateTimeFormat("es-CR", { day: "numeric", month: "short", timeZone: "UTC" });
-const dayOnly = new Intl.DateTimeFormat("es-CR", { day: "numeric", timeZone: "UTC" });
-const fullDate = new Intl.DateTimeFormat("es-CR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+type Lang = "es" | "en";
+const TAG: Record<Lang, string> = { es: "es-CR", en: "en-US" };
+const at = (date: string) => new Date(`${date}T12:00:00Z`);
+const fmt = (lang: Lang, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(TAG[lang], { ...options, timeZone: "UTC" });
+const clean = (text: string) => text.replace(/\./g, "");
 
-/** "10 al 16 nov", or "29 dic al 4 ene" when the week crosses a month. */
-export function weekRange(weekStart: string) {
-  const first = new Date(`${weekStart}T12:00:00Z`);
-  const last = new Date(`${addDays(weekStart, 6)}T12:00:00Z`);
+/** "10 al 16 nov" or "Nov 10 to 16"; across months, "29 dic al 4 ene" or "Dec 29 to Jan 4". */
+export function weekRange(weekStart: string, lang: Lang = "es") {
+  const first = at(weekStart);
+  const last = at(addDays(weekStart, 6));
   const sameMonth = first.getUTCMonth() === last.getUTCMonth();
-  return `${sameMonth ? dayOnly.format(first) : dayMonth.format(first)} al ${dayMonth.format(last)}`.replace(/\./g, "");
+  const dayMonth = fmt(lang, { day: "numeric", month: "short" });
+  const day = fmt(lang, { day: "numeric" });
+  if (lang === "es") return clean(`${sameMonth ? day.format(first) : dayMonth.format(first)} al ${dayMonth.format(last)}`);
+  return clean(`${dayMonth.format(first)} to ${sameMonth ? day.format(last) : dayMonth.format(last)}`);
 }
 
-export const shortDate = (date: string) => fullDate.format(new Date(`${date}T12:00:00Z`)).replace(/\./g, "");
+/** "dom, 8 nov" or "Sun, Nov 8". */
+export const shortDate = (date: string, lang: Lang = "es") => clean(fmt(lang, { weekday: "short", day: "numeric", month: "short" }).format(at(date)));
+
+/** "Noviembre 2026" or "November 2026" for a YYYY-MM month. */
+export function monthLabel(month: string, lang: Lang = "es") {
+  const text = fmt(lang, { month: "long", year: "numeric" }).format(at(`${month}-15`)).replace(" de ", " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The hour and minutes in Costa Rica of a moment, as 14:05. */
+export const costaRicaTime = (moment: Date) =>
+  new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Costa_Rica" }).format(moment);

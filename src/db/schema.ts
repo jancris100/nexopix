@@ -1,5 +1,5 @@
 import { boolean, date, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import type { Brief } from "../lib/portero";
+import type { Brief } from "../lib/gatekeeper";
 
 export const accounts = pgTable("accounts", {
   id: text("id").primaryKey(),

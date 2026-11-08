@@ -5,9 +5,9 @@ import { hasSession, SESSION_COOKIE } from "./lib/session";
 export async function middleware(request: NextRequest) {
   if (await hasSession(request.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next();
   if (request.nextUrl.pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "Inicia sesión en el panel." }, { status: 401 });
+    return NextResponse.json({ error: { code: "login_required", message: "Log in to the panel." } }, { status: 401 });
   }
-  const login = new URL("/entrar", request.url);
+  const login = new URL("/login", request.url);
   return NextResponse.redirect(login);
 }
 
