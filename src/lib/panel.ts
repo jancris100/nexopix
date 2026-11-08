@@ -1,7 +1,7 @@
-import { and, asc, between, eq } from "drizzle-orm";
+import { and, asc, between, desc, eq, lte, min } from "drizzle-orm";
 import { getDb, isTestDatabase } from "../db";
 import { accounts, agendaItems, agents, approvals, pieceResults, pieces } from "../db/schema";
-import { addDays, mondayOf, todayInCostaRica } from "./dates";
+import { addDays, isDate, mondayOf, todayInCostaRica } from "./dates";
 import { normalizeHandle } from "./handles";
 import type { InstagramProfile } from "./instagram";
 import { metaConfig } from "./instagram";
@@ -26,17 +26,22 @@ export async function loadPanel() {
   const db = await getDb();
   const today = todayInCostaRica();
   const weekStart = mondayOf(today);
-  const [accountRows, agentRows, pieceRows, agendaRows, pendingRows, resultRows] = await Promise.all([
+  const [accountRows, agentRows, pieceRows, agendaRows, pendingRows, resultRows, [first], historyRows] = await Promise.all([
     db.select(accountColumns).from(accounts).orderBy(asc(accounts.handle)),
     db.select().from(agents).orderBy(asc(agents.sortOrder)),
     db.select().from(pieces).orderBy(asc(pieces.id)),
     db.select().from(agendaItems).where(between(agendaItems.scheduledOn, weekStart, addDays(weekStart, 6))).orderBy(asc(agendaItems.time)),
     db.select().from(approvals).where(eq(approvals.status, "pending")).orderBy(asc(approvals.id)),
     db.select().from(pieceResults),
+    db.select({ day: min(agendaItems.scheduledOn) }).from(agendaItems),
+    db.select().from(agendaItems).where(lte(agendaItems.scheduledOn, today)).orderBy(desc(agendaItems.scheduledOn), desc(agendaItems.time)).limit(300),
   ]);
+  const firstDay = first?.day ? String(first.day) : today;
   return {
     today,
     weekStart,
+    /** Monday of the first week with publications (week 1), never after this week. */
+    firstWeek: mondayOf(firstDay < today ? firstDay : today),
     isTest: isTestDatabase(),
     canConnect: Boolean(metaConfig()) && isProtected() && canEncrypt() && !isTestDatabase(),
     isProtected: isProtected(),
@@ -44,9 +49,19 @@ export async function loadPanel() {
     agents: agentRows,
     pieces: pieceRows,
     agenda: agendaRows,
+    /** What was planned up to today, newest first: the record of what was published and what was not. */
+    history: historyRows,
     results: resultRows,
     approvals: pendingRows.map(({ id, pieceId, agent }) => ({ id, pieceId, agent })),
   };
+}
+
+/** The publications planned for the week that starts on that Monday. */
+export async function loadWeek(weekStart: string) {
+  if (!isDate(weekStart)) return [];
+  const monday = mondayOf(weekStart);
+  const db = await getDb();
+  return db.select().from(agendaItems).where(between(agendaItems.scheduledOn, monday, addDays(monday, 6))).orderBy(asc(agendaItems.time));
 }
 
 export async function toggleAgendaItem(id: number) {

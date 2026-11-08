@@ -32,3 +32,12 @@ test("an empty start says so", () => {
   assert.equal(lines[1], "Todavía ninguna pieza trajo consultas.");
   assert.equal(lines[2], "No tienes nada por aprobar.");
 });
+
+test("weeks count from the first week with publications", async () => {
+  const { weekNumber, weekRange, mondayOf } = await import("./dates");
+  assert.equal(mondayOf("2026-11-08"), "2026-11-02");
+  assert.equal(weekNumber("2026-11-02", "2026-11-02"), 1);
+  assert.equal(weekNumber("2026-11-02", "2026-11-16"), 3);
+  assert.equal(weekRange("2026-11-02"), "2 al 8 nov");
+  assert.equal(weekRange("2026-12-28"), "28 dic al 3 ene");
+});

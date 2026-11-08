@@ -4,8 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, useTransition, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
-import { addAccount, addPublication, advance, decide, removeAccount, saveProfile, toggleAgent, toggleItem } from "../../app/panel/actions";
-import { addDays } from "../../lib/dates";
+import { addAccount, addPublication, advance, decide, removeAccount, saveProfile, toggleAgent, toggleItem, weekAgenda } from "../../app/panel/actions";
+import { addDays, mondayOf, shortDate, weekNumber, weekRange } from "../../lib/dates";
 import { morningSummary, trackedLink } from "../../lib/insights";
 import type { Snapshot } from "../../lib/panel";
 import { FORMATS, type Format } from "../../lib/portero";
@@ -15,6 +15,7 @@ type View = "team" | "week" | "networks" | "results";
 type Piece = Snapshot["pieces"][number];
 type Account = Snapshot["accounts"][number];
 type Agent = Snapshot["agents"][number];
+type AgendaItem = Snapshot["agenda"][number];
 
 const STATIONS = [
   { stage: 0, name: "Idea", agent: "estratega", verb: "Trabaja" },
@@ -110,30 +111,7 @@ export default function PanelApp({ initial }: { initial: Snapshot }) {
 
         {view === "team" && <Team snap={snap} busy={busy} accountOf={accountOf} onAdvance={(id) => run(() => advance(id))} onDecide={(id, approved) => run(() => decide(id, approved))} onToggleAgent={(id) => run(() => toggleAgent(id))} />}
 
-        {view === "week" && (
-          <section aria-label="Semana" className="np-rows">
-            {Array.from({ length: 7 }, (_, index) => addDays(snap.weekStart, index)).map((date, index) => {
-              const items = snap.agenda.filter((item) => item.scheduledOn === date);
-              return (
-                <article key={date} className={`day${date === snap.today ? " is-today" : ""}`}>
-                  <button type="button" className={`day__date${date === day ? " is-picked" : ""}`} aria-pressed={date === day} onClick={() => setDay(date)}>
-                    <strong>{dayNumber(date)}</strong>
-                    <span>{LONG_DAYS[index]}</span>
-                  </button>
-                  <div className="day__items">
-                    {items.length === 0 && <p className="np-note">Sin publicaciones</p>}
-                    {items.map((item) => (
-                      <button key={item.id} type="button" className={`slot${item.done ? " is-done" : ""}`} aria-pressed={item.done} disabled={busy} onClick={() => run(() => toggleItem(item.id))}>
-                        <strong>{item.title}</strong>
-                        <small>{`${item.time}, ${formatLabel(item.format)} en ${accountOf(item.accountId)?.handle}`}</small>
-                      </button>
-                    ))}
-                  </div>
-                </article>
-              );
-            })}
-          </section>
-        )}
+        {view === "week" && <Week snap={snap} busy={busy} day={day} onPickDay={setDay} accountOf={accountOf} onToggle={(id) => run(() => toggleItem(id))} />}
 
         {view === "networks" && <Networks snap={snap} busy={busy} onRemove={(id) => run(() => removeAccount(id))} onSaved={(next) => animate(() => setSnap(next))} />}
 
@@ -152,6 +130,151 @@ export default function PanelApp({ initial }: { initial: Snapshot }) {
         />
       )}
     </div>
+  );
+}
+
+/** Weeks ahead that can already be planned. */
+const WEEKS_AHEAD = 8;
+
+/** The week as a control of publications: pick any week from the first one, or read the whole record. */
+function Week({ snap, busy, day, onPickDay, accountOf, onToggle }: {
+  snap: Snapshot;
+  busy: boolean;
+  day: string;
+  onPickDay: (date: string) => void;
+  accountOf: (id: string) => Account | undefined;
+  onToggle: (id: number) => void;
+}) {
+  const [mode, setMode] = useState<"calendar" | "history">("calendar");
+  const [week, setWeek] = useState(snap.weekStart);
+  const [items, setItems] = useState<AgendaItem[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const isCurrent = week === snap.weekStart;
+
+  // Another week is read on demand, and read again after every change so a ticked slot stays ticked.
+  useEffect(() => {
+    if (isCurrent) return;
+    let live = true;
+    setLoading(true);
+    weekAgenda(week)
+      .then((rows) => live && setItems(rows))
+      .catch(() => live && setItems([]))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+    };
+  }, [week, isCurrent, snap]);
+
+  const lastWeek = addDays(snap.weekStart, WEEKS_AHEAD * 7);
+  const weeks: string[] = [];
+  for (let monday = snap.firstWeek; monday <= lastWeek; monday = addDays(monday, 7)) weeks.push(monday);
+  const go = (monday: string) => {
+    if (monday < snap.firstWeek || monday > lastWeek) return;
+    animate(() => {
+      setWeek(monday);
+      setItems(null);
+      onPickDay(monday === snap.weekStart ? snap.today : monday);
+    }, "page");
+  };
+  const label = (monday: string) => `Semana ${weekNumber(snap.firstWeek, monday)}, del ${weekRange(monday)}${monday === snap.weekStart ? " (esta semana)" : ""}`;
+  const shown = isCurrent ? snap.agenda : items ?? [];
+  const done = shown.filter((item) => item.done).length;
+
+  return (
+    <section aria-label="Semana" className="np-rows">
+      <div className="weekbar">
+        <div className="np-seg" role="group" aria-label="Vista">
+          <button type="button" aria-pressed={mode === "calendar"} className={mode === "calendar" ? "is-on" : ""} onClick={() => animate(() => setMode("calendar"), "page")}>Calendario</button>
+          <button type="button" aria-pressed={mode === "history"} className={mode === "history" ? "is-on" : ""} onClick={() => animate(() => setMode("history"), "page")}>Historial</button>
+        </div>
+        {mode === "calendar" && (
+          <div className="weekbar__pick">
+            <button type="button" className="np-btn weekbar__step" aria-label="Semana anterior" disabled={week <= snap.firstWeek} onClick={() => go(addDays(week, -7))}>‹</button>
+            <select aria-label="Semana" value={week} onChange={(event) => go(event.target.value)}>
+              {weeks.map((monday) => <option key={monday} value={monday}>{label(monday)}</option>)}
+            </select>
+            <button type="button" className="np-btn weekbar__step" aria-label="Semana siguiente" disabled={week >= lastWeek} onClick={() => go(addDays(week, 7))}>›</button>
+            {!isCurrent && <button type="button" className="np-btn" onClick={() => go(snap.weekStart)}>Esta semana</button>}
+          </div>
+        )}
+      </div>
+
+      {mode === "calendar" && (
+        <>
+          <p className="np-note" aria-live="polite">
+            {loading ? "Cargando la semana…" : shown.length === 0 ? "Nada planeado esta semana. Usa Nueva petición para agregar una publicación." : `${done} de ${shown.length} publicadas`}
+          </p>
+          {Array.from({ length: 7 }, (_, index) => addDays(week, index)).map((date, index) => {
+            const dayItems = shown.filter((item) => item.scheduledOn === date);
+            return (
+              <article key={date} className={`day${date === snap.today ? " is-today" : ""}`}>
+                <button type="button" className={`day__date${date === day ? " is-picked" : ""}`} aria-pressed={date === day} onClick={() => onPickDay(date)}>
+                  <strong>{dayNumber(date)}</strong>
+                  <span>{LONG_DAYS[index]}</span>
+                </button>
+                <div className="day__items">
+                  {dayItems.length === 0 && <p className="np-note">Sin publicaciones</p>}
+                  {dayItems.map((item) => (
+                    <button key={item.id} type="button" className={`slot${item.done ? " is-done" : ""}`} aria-pressed={item.done} disabled={busy} onClick={() => onToggle(item.id)}>
+                      <strong>{item.title}</strong>
+                      <small>{`${item.time}, ${formatLabel(item.format)} en ${accountOf(item.accountId)?.handle}`}</small>
+                    </button>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
+        </>
+      )}
+
+      {mode === "history" && <History snap={snap} accountOf={accountOf} />}
+    </section>
+  );
+}
+
+/** Everything planned up to today, week by week, with what was published and what was left out. */
+function History({ snap, accountOf }: { snap: Snapshot; accountOf: (id: string) => Account | undefined }) {
+  const [accountId, setAccountId] = useState("all");
+  const rows = snap.history.filter((item) => accountId === "all" || item.accountId === accountId);
+  const groups = new Map<string, AgendaItem[]>();
+  for (const item of rows) {
+    const monday = mondayOf(item.scheduledOn);
+    groups.set(monday, [...(groups.get(monday) ?? []), item]);
+  }
+  const state = (item: AgendaItem) => (item.done ? "done" : item.scheduledOn < snap.today ? "missed" : "due");
+  const STATE_TEXT = { done: "Publicada", missed: "No se publicó", due: "Pendiente" };
+
+  return (
+    <>
+      {snap.accounts.length > 1 && (
+        <label className="history__filter">
+          Cuenta
+          <select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+            <option value="all">Todas</option>
+            {snap.accounts.map((account) => <option key={account.id} value={account.id}>{account.handle}</option>)}
+          </select>
+        </label>
+      )}
+      {groups.size === 0 && <p className="np-note">Aún no hay publicaciones. Lo que planees y publiques queda guardado aquí, semana por semana.</p>}
+      {[...groups.entries()].map(([monday, list]) => (
+        <section key={monday} className="group" aria-label={`Semana ${weekNumber(snap.firstWeek, monday)}`}>
+          <h2 className="history__week">
+            {`Semana ${weekNumber(snap.firstWeek, monday)}`}
+            <small>{`del ${weekRange(monday)}, ${list.filter((item) => item.done).length} de ${list.length} publicadas`}</small>
+          </h2>
+          {list.map((item) => (
+            <article key={item.id} className="history__row">
+              <p className="history__date">{shortDate(item.scheduledOn)}<small>{item.time}</small></p>
+              <div className="piece__text">
+                <strong>{item.title}</strong>
+                <small>{`${formatLabel(item.format)} en ${accountOf(item.accountId)?.handle ?? "cuenta eliminada"}`}</small>
+              </div>
+              <p className={`history__state is-${state(item)}`}>{STATE_TEXT[state(item)]}</p>
+            </article>
+          ))}
+        </section>
+      ))}
+    </>
   );
 }
 

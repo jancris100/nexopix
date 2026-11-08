@@ -1,8 +1,11 @@
 "use server";
 
+import { isDate } from "../../lib/dates";
 import * as panel from "../../lib/panel";
 
-const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+export async function weekAgenda(weekStart: string) {
+  return panel.loadWeek(weekStart);
+}
 
 export async function toggleItem(id: number) {
   await panel.toggleAgendaItem(id);
