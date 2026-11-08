@@ -18,7 +18,7 @@ export default function Home() {
           <Logo size={30} />
           Nexopix
         </Link>
-        <Link href="/panel" className="btn btn--quiet">Abrir el panel</Link>
+        <nav className="site__links"><Link href="/docs">API</Link><Link href="/panel" className="btn btn--quiet">Abrir el panel</Link></nav>
       </header>
 
       <section className="wrap hero">

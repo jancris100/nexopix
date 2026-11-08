@@ -167,7 +167,6 @@ export async function decideApproval(id: number, approved: boolean) {
   });
 }
 
-/** Entry of the pipeline: the gate first; what passes becomes an idea and, with a date, an item of the week. */
 /**
  * The Portero receives a request and keeps it: checked with fixed rules, stored with what it carried, and never twice
  * for the same reference of the same sender.

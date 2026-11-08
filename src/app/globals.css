@@ -62,3 +62,4 @@ p { margin: 0; }
   .hero { grid-template-columns: minmax(0, 1fr); gap: 36px; padding-block: 28px 56px; }
   .steps { grid-template-columns: minmax(0, 1fr); }
 }
+.site__links { display: flex; align-items: center; gap: 20px; font-size: 15px; font-weight: 600; }
