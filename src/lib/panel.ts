@@ -1,6 +1,6 @@
 import { and, asc, between, desc, eq, lte, min } from "drizzle-orm";
 import { getDb, isTestDatabase } from "../db";
-import { accounts, agendaItems, agents, approvals, pieceResults, pieces } from "../db/schema";
+import { accounts, agendaItems, agents, approvals, ownerProfile, pieceResults, pieces } from "../db/schema";
 import { addDays, isDate, mondayOf, todayInCostaRica } from "./dates";
 import { normalizeHandle } from "./handles";
 import type { InstagramProfile } from "./instagram";
@@ -26,7 +26,7 @@ export async function loadPanel() {
   const db = await getDb();
   const today = todayInCostaRica();
   const weekStart = mondayOf(today);
-  const [accountRows, agentRows, pieceRows, agendaRows, pendingRows, resultRows, [first], historyRows] = await Promise.all([
+  const [accountRows, agentRows, pieceRows, agendaRows, pendingRows, resultRows, [first], historyRows, [owner]] = await Promise.all([
     db.select(accountColumns).from(accounts).orderBy(asc(accounts.handle)),
     db.select().from(agents).orderBy(asc(agents.sortOrder)),
     db.select().from(pieces).orderBy(asc(pieces.id)),
@@ -35,6 +35,7 @@ export async function loadPanel() {
     db.select().from(pieceResults),
     db.select({ day: min(agendaItems.scheduledOn) }).from(agendaItems),
     db.select().from(agendaItems).where(lte(agendaItems.scheduledOn, today)).orderBy(desc(agendaItems.scheduledOn), desc(agendaItems.time)).limit(300),
+    db.select({ name: ownerProfile.name, email: ownerProfile.email, company: ownerProfile.company }).from(ownerProfile).where(eq(ownerProfile.id, 1)),
   ]);
   const firstDay = first?.day ? String(first.day) : today;
   return {
@@ -45,6 +46,15 @@ export async function loadPanel() {
     isTest: isTestDatabase(),
     canConnect: Boolean(metaConfig()) && isProtected() && canEncrypt() && !isTestDatabase(),
     isProtected: isProtected(),
+    /** Who owns this Nexopix, shown in the profile menu. */
+    owner: owner ?? { name: "", email: "", company: "" },
+    /** What the server has configured, as yes or no only: values never leave the server. */
+    setup: {
+      apiKey: Boolean(process.env.NEXOPIX_API_KEY),
+      meta: Boolean(metaConfig()),
+      encryption: canEncrypt(),
+      database: !isTestDatabase(),
+    },
     accounts: accountRows,
     agents: agentRows,
     pieces: pieceRows,
@@ -277,4 +287,19 @@ export async function instagramPostInsights(accountId: string, mediaId: string) 
   const [account] = await connectedInstagram(accountId);
   if (!account) return { insights: null, reason: "no-account" };
   return mediaInsights(mediaId, account.token);
+}
+
+export type OwnerProfile = { name: string; email: string; company: string };
+const EMAIL = /^[^s@]+@[^s@]+.[^s@]+$/;
+
+/** Saves the owner's profile. Returns the reason when a field does not fit. */
+export async function saveOwnerProfile(values: OwnerProfile) {
+  const clean = { name: String(values.name ?? "").trim().slice(0, 80), email: String(values.email ?? "").trim().toLowerCase().slice(0, 120), company: String(values.company ?? "").trim().slice(0, 80) };
+  if (clean.email && !EMAIL.test(clean.email)) return "email_invalid" as const;
+  const db = await getDb();
+  await db
+    .insert(ownerProfile)
+    .values({ id: 1, ...clean, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: ownerProfile.id, set: { ...clean, updatedAt: new Date() } });
+  return null;
 }

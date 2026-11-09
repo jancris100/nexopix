@@ -87,3 +87,12 @@ export const approvals = pgTable(
   },
   (table) => [index("approvals_status").on(table.status)],
 );
+
+/** The owner of this Nexopix: one row, edited from Profile and settings. */
+export const ownerProfile = pgTable("owner_profile", {
+  id: integer("id").primaryKey().default(1),
+  name: text("name").notNull().default(""),
+  email: text("email").notNull().default(""),
+  company: text("company").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

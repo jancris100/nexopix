@@ -62,3 +62,8 @@ export async function addPublication(input: { title: string; format: string; acc
   );
   return result.ok ? { snapshot: await panel.loadPanel() } : { error: issueMessage(result.issue, await getLocale()) };
 }
+
+export async function saveOwner(values: panel.OwnerProfile) {
+  const refusal = await panel.saveOwnerProfile(values);
+  return refusal ? { error: dictionaryFor(await getLocale()).account.emailInvalid } : { snapshot: await panel.loadPanel() };
+}

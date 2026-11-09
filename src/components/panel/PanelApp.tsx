@@ -5,15 +5,16 @@ import Link from "next/link";
 import { useEffect, useState, useTransition, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
 import { addAccount, addPublication, advance, decide, instagramPosts, postInsights, removeAccount, saveProfile, toggleAgent, toggleItem, weekAgenda } from "../../app/panel/actions";
-import { LanguageSwitch, useI18n } from "../../i18n/client";
+import { useI18n } from "../../i18n/client";
 import type { Dictionary } from "../../i18n/dictionaries";
 import { addDays, costaRicaTime, mondayOf, monthLabel, shortDate, todayInCostaRica, weekNumber, weekRange } from "../../lib/dates";
 import { FORMATS, type Format } from "../../lib/gatekeeper";
 import { summaryFacts, trackedLink } from "../../lib/insights";
 import type { Snapshot } from "../../lib/panel";
 import { AGENT_TONES, AgentMark, Logo, NavIcon } from "./Marks";
+import { AccountView, ProfileMenu } from "./Profile";
 
-type View = "team" | "week" | "networks" | "results";
+type View = "team" | "week" | "networks" | "results" | "account";
 type Piece = Snapshot["pieces"][number];
 type Account = Snapshot["accounts"][number];
 type Agent = Snapshot["agents"][number];
@@ -29,7 +30,7 @@ const STATIONS = [
 ];
 const REVIEW = 2;
 const LAST_STAGE = 4;
-const VIEWS: View[] = ["team", "week", "networks", "results"];
+const VIEWS = ["team", "week", "networks", "results"] as const;
 const PROFILE_KEYS = ["voice", "offer", "audience", "neverPromise", "businessInfo"] as const;
 
 const dayNumber = (date: string) => Number(date.slice(8));
@@ -74,6 +75,7 @@ export default function PanelApp({ initial }: { initial: Snapshot }) {
       }
     });
 
+  const openView = (next: View) => view !== next && animate(() => setView(next), "page");
   const accountOf = (id: string) => snap.accounts.find((account) => account.id === id);
   const decisions = snap.approvals.length;
 
@@ -84,20 +86,21 @@ export default function PanelApp({ initial }: { initial: Snapshot }) {
           <Logo size={40} />
         </Link>
         {VIEWS.map((id) => (
-          <button key={id} type="button" className={view === id ? "is-on" : ""} aria-current={view === id ? "page" : undefined} onClick={() => view !== id && animate(() => setView(id), "page")}>
+          <button key={id} type="button" className={view === id ? "is-on" : ""} aria-current={view === id ? "page" : undefined} onClick={() => openView(id)}>
             <NavIcon name={id} />
             <span>{t.panel.tabs[id].label}</span>
             {id === "team" && decisions > 0 && <b aria-label={t.panel.toApprove(decisions)}>{decisions}</b>}
           </button>
         ))}
+        <ProfileMenu snap={snap} className="pmenu--rail" onSettings={() => openView("account")} />
       </nav>
 
       <div className="np-page">
         <header className="np-top">
-          <h1>{t.panel.tabs[view].title}</h1>
+          <h1>{view === "account" ? t.account.title : t.panel.tabs[view].title}</h1>
           {snap.isTest && <p className="np-test">{t.panel.testDatabase}</p>}
-          <LanguageSwitch />
           <button type="button" className="np-btn np-btn--go" onClick={() => setSheet(true)}>{t.panel.newRequest}</button>
+          <ProfileMenu snap={snap} className="pmenu--top" onSettings={() => openView("account")} />
         </header>
 
         {failure && <p className="np-alert" role="alert">{t.panel.saveFailed}</p>}
@@ -109,6 +112,8 @@ export default function PanelApp({ initial }: { initial: Snapshot }) {
         {view === "networks" && <Networks snap={snap} busy={busy} onRemove={(id) => run(() => removeAccount(id))} onSaved={(next) => animate(() => setSnap(next))} />}
 
         {view === "results" && <Results snap={snap} accountOf={accountOf} />}
+
+        {view === "account" && <AccountView snap={snap} onSaved={(next) => setSnap(next)} onBack={() => openView("team")} />}
       </div>
 
       {sheet && (
