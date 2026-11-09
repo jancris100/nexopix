@@ -1,4 +1,5 @@
 import { isDate, todayInCostaRica } from "./dates";
+import { cleanCreative, isTemplate, TEMPLATES, type Creative, type TemplateId } from "./templates";
 
 /** Formats of a request and the pipeline each one follows. Their names on screen live in the dictionaries. */
 export const FORMATS = {
@@ -34,6 +35,8 @@ export type Product = {
   description?: string;
   url?: string;
   images?: string[];
+  /** Price before the offer, same currency (shown struck through by the templates). */
+  compareAtPrice?: number;
 };
 
 /** The body of POST /api/requests. */
@@ -53,6 +56,9 @@ export type Request = {
   /** Desired publication day, YYYY-MM-DD in Costa Rica. */
   publishOn?: string;
   notes?: string;
+  /** A template id (offer, launch…): the main image is drawn with it. */
+  template?: string;
+  creative?: Creative;
 };
 
 export type Account = { id: string; handle: string; network: string };
@@ -65,6 +71,8 @@ export type Brief = {
   media: string[];
   publishOn: string | null;
   notes: string | null;
+  template: TemplateId | null;
+  creative: Creative;
 };
 
 /** Why a request was refused: a stable code for programs and the values its message needs. */
@@ -93,7 +101,11 @@ export type IssueCode =
   | "source_invalid"
   | "date_invalid"
   | "date_past"
-  | "notes_too_long";
+  | "notes_too_long"
+  | "template_unknown"
+  | "template_format"
+  | "creative_invalid"
+  | "product_compare_price";
 
 export type Verdict<T extends Account = Account> =
   | { ok: true; account: T; format: Format; title: string; manual: boolean; brief: Brief }
@@ -154,6 +166,10 @@ function checkProduct(value: unknown): { product: Product | null; issue?: Issue 
     }
     product.images = raw.images;
   }
+  if (raw.compareAtPrice !== undefined) {
+    if (typeof raw.compareAtPrice !== "number" || !Number.isFinite(raw.compareAtPrice) || raw.compareAtPrice < 0) return { product: null, issue: { code: "product_compare_price" } };
+    product.compareAtPrice = raw.compareAtPrice;
+  }
   return { product };
 }
 
@@ -202,12 +218,21 @@ export function checkRequest<T extends Account>(request: Partial<Request>, accou
   const notes = text(request.notes);
   if (notes.length > LIMITS.notes) return refuse("notes_too_long", { max: LIMITS.notes });
 
+  let template: TemplateId | null = null;
+  if (request.template !== undefined && request.template !== null && request.template !== "") {
+    if (!isTemplate(request.template)) return refuse("template_unknown", { template: String(request.template) });
+    if (!(TEMPLATES[request.template].formats as readonly string[]).includes(format)) return refuse("template_format", { template: request.template, format });
+    template = request.template;
+  }
+  const creative = cleanCreative(request.creative);
+  if (creative === null) return refuse("creative_invalid");
+
   return {
     ok: true,
     account,
     format,
     title,
     manual: request.mode === "manual" || request.network === "tiktok",
-    brief: { source, reference, product, media, publishOn, notes: notes || null },
+    brief: { source, reference, product, media, publishOn, notes: notes || null, template, creative },
   };
 }

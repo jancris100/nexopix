@@ -34,6 +34,7 @@ export type DocsText = {
   };
   status: { title: string; lead: string; request: string; response: string; notes: string[] };
   formats: { title: string; caption: string; head: [string, string, string, string]; rows: [string, string, string, string][]; tip: string };
+  templates: { title: string; lead: string; listTitle: string; listLead: string; request: string; response: string; brandTitle: string; brandLead: string; brandBody: string; notes: string[] };
   errors: {
     title: string;
     lead: string;
@@ -54,13 +55,13 @@ export type DocsText = {
   footer: string;
 };
 
-const sectionIds = ["intro", "before", "flow", "accounts", "requests", "status", "formats", "errors", "practices", "examples", "faq"];
+const sectionIds = ["intro", "before", "flow", "accounts", "requests", "status", "formats", "templates", "errors", "practices", "examples", "faq"];
 
 const es: DocsText = {
   meta: { title: "API de Nexopix", description: "Cómo otro sistema pide contenido a Nexopix y sigue cada petición hasta que se publica." },
   crumb: "Documentación de la API",
   onThisPage: "En esta página",
-  sections: ["Qué es la API", "Antes de empezar", "Recorrido de una petición", "Ver las cuentas", "Enviar una petición", "Consultar el estado", "Formatos y redes", "Errores", "Buenas prácticas", "Ejemplo completo", "Preguntas frecuentes"].map((label, index) => ({ id: sectionIds[index], label })),
+  sections: ["Qué es la API", "Antes de empezar", "Recorrido de una petición", "Ver las cuentas", "Enviar una petición", "Consultar el estado", "Formatos y redes", "Plantillas y marca", "Errores", "Buenas prácticas", "Ejemplo completo", "Preguntas frecuentes"].map((label, index) => ({ id: sectionIds[index], label })),
   intro: {
     title: "API de Nexopix",
     lead: "La API deja que otro sistema, como INTENEXO o una tienda en línea, le pida contenido para redes sociales al equipo de agentes de Nexopix y siga cada pedido hasta que se publica.",
@@ -120,6 +121,8 @@ const es: DocsText = {
       { name: "media", type: "lista de textos", rule: "Imágenes o videos para usar, como direcciones https públicas. Hasta 10. Si no manda ninguna, se usan las imágenes del producto.", example: '["https://…/1.jpg"]' },
       { name: "publishOn", type: "texto", rule: "Día en que quiere que salga, como `YYYY-MM-DD`, hora de Costa Rica. No puede ser un día que ya pasó. La petición aparece ese día en la semana del panel.", example: '"2026-11-20"' },
       { name: "notes", type: "texto", rule: "Indicaciones para el equipo: tono, descuento, qué evitar. Hasta 500 caracteres.", example: '"15% off"' },
+      { name: "template", type: "texto", rule: "Una plantilla de `GET /api/templates` (`offer`, `launch`, `highlight`, `benefits`). La imagen principal se dibuja con ella sobre la primera foto. Sin ella se usa la plantilla por defecto de la cuenta, si tiene.", example: '"offer"' },
+      { name: "creative", type: "objeto", rule: "Lo que muestra la plantilla: `headline` (hasta 60), `cta` (hasta 24), `showPrice` (true o false) y `benefits` (hasta 3, de 48 caracteres).", example: '{ "headline": "…" }' },
       { name: "mode", type: "texto", rule: "`auto` (Nexopix publica después de la aprobación) o `manual` (queda como tarea para una persona). Si no lo manda, es `auto`. TikTok siempre es `manual`.", example: '"auto"' },
     ],
     productTitle: "Producto",
@@ -132,6 +135,7 @@ const es: DocsText = {
       { name: "description", type: "texto", rule: "Hasta 1000 caracteres.", example: '"Fresh juice in 10 seconds."' },
       { name: "url", type: "texto", rule: "Dirección https de la página del producto. Los enlaces que publique el equipo apuntan aquí.", example: '"https://shop.cr/p/juicer"' },
       { name: "images", type: "lista de textos", rule: "Hasta 10 direcciones https públicas.", example: '["https://…/a.jpg"]' },
+      { name: "compareAtPrice", type: "número", rule: "Precio antes de la oferta, en la misma moneda. Las plantillas lo muestran tachado.", example: "29900" },
     ],
     fullBody: "Cuerpo completo de ejemplo",
     minimal: "Pedido mínimo con curl",
@@ -168,6 +172,21 @@ const es: DocsText = {
       ["ad", "Meta Ads", "Instagram, Facebook", "Imagen o video para un anuncio pagado."],
     ],
     tip: "Para una imagen use `post`; para varias, `carousel`; para un video, `reel`.",
+  },
+  templates: {
+    title: "Plantillas y marca",
+    lead: "Una plantilla convierte la foto del producto en un anuncio: la foto, un titular, el precio y un botón, con los colores y el logo de la cuenta. El texto y el precio los dibuja el código, nunca un modelo de imágenes: el precio publicado es siempre el real. La imagen queda en una dirección pública de Nexopix (`/api/creative/{pieza}/{versión}.jpg`) que Instagram descarga al publicar.",
+    listTitle: "Ver las plantillas",
+    listLead: "Devuelve las plantillas con su nombre y descripción en el idioma pedido y los formatos que dibuja cada una (imagen, carrusel e historia; el reel y el anuncio todavía no).",
+    request: "Pedido",
+    response: "Respuesta 200",
+    brandTitle: "Enviar la marca de una cuenta",
+    brandLead: "El sistema dueño de la marca la envía una vez: logo (dirección https pública, mejor PNG con fondo transparente), color principal y de acento (#RRGGBB) y la plantilla por defecto. Todos los campos son opcionales; lo que no se manda queda vacío.",
+    brandBody: "Cuerpo de ejemplo",
+    notes: [
+      "Respuestas de la marca: 200 `{ \"ok\": true }`, 404 `account_unknown`, 422 `logo_not_https`, `color_invalid` o `template_unknown`.",
+      "El panel de Nexopix muestra la imagen dibujada en la ficha de cada pieza y permite cambiar la plantilla, el titular y el botón antes de aprobar.",
+    ],
   },
   errors: {
     title: "Errores",
@@ -207,6 +226,10 @@ const es: DocsText = {
       ["source_invalid", "El origen admite minúsculas, números y guiones, hasta 40 caracteres.", "`source` con otros símbolos."],
       ["notes_too_long", "Las notas admiten hasta 500 caracteres.", "`notes` demasiado largas."],
       ["mode_invalid", "mode debe ser auto o manual.", "`mode` con otro valor."],
+      ["template_unknown", "No existe la plantilla X.", "`template` que no está en `GET /api/templates`."],
+      ["template_format", "La plantilla X no dibuja el formato Y.", "La plantilla no sirve para ese formato (por ejemplo un reel)."],
+      ["creative_invalid", "creative admite headline, cta, showPrice y benefits…", "`creative` con campos de más o demasiado largos."],
+      ["product_compare_price", "El precio anterior debe ser un número de cero o más.", "`product.compareAtPrice` negativo o como texto."],
     ],
   },
   practices: {
@@ -243,7 +266,7 @@ const en: DocsText = {
   meta: { title: "Nexopix API", description: "How another system asks Nexopix for content and follows each request until it is published." },
   crumb: "API documentation",
   onThisPage: "On this page",
-  sections: ["What the API is", "Before you start", "Life of a request", "List the accounts", "Send a request", "Check the status", "Formats and networks", "Errors", "Good practices", "Full example", "FAQ"].map((label, index) => ({ id: sectionIds[index], label })),
+  sections: ["What the API is", "Before you start", "Life of a request", "List the accounts", "Send a request", "Check the status", "Formats and networks", "Templates and brand", "Errors", "Good practices", "Full example", "FAQ"].map((label, index) => ({ id: sectionIds[index], label })),
   intro: {
     title: "Nexopix API",
     lead: "The API lets another system, such as INTENEXO or an online store, ask Nexopix's team of agents for social media content and follow each request until it is published.",
@@ -303,6 +326,8 @@ const en: DocsText = {
       { name: "media", type: "string list", rule: "Images or videos to use, as public https addresses. Up to 10. If you send none, the product's images are used.", example: '["https://…/1.jpg"]' },
       { name: "publishOn", type: "string", rule: "Day you want it out, as `YYYY-MM-DD`, Costa Rica time. It cannot be a day that already passed. The request shows on that day in the panel's week.", example: '"2026-11-20"' },
       { name: "notes", type: "string", rule: "Guidance for the team: tone, discount, what to avoid. Up to 500 characters.", example: '"15% off"' },
+      { name: "template", type: "string", rule: "A template from `GET /api/templates` (`offer`, `launch`, `highlight`, `benefits`). The main image is drawn with it over the first photo. Without it, the account's default template is used, if any.", example: '"offer"' },
+      { name: "creative", type: "object", rule: "What the template shows: `headline` (up to 60), `cta` (up to 24), `showPrice` (true or false) and `benefits` (up to 3, 48 characters each).", example: '{ "headline": "…" }' },
       { name: "mode", type: "string", rule: "`auto` (Nexopix publishes after approval) or `manual` (it becomes a task for a person). Defaults to `auto`. TikTok is always `manual`.", example: '"auto"' },
     ],
     productTitle: "Product",
@@ -315,6 +340,7 @@ const en: DocsText = {
       { name: "description", type: "string", rule: "Up to 1000 characters.", example: '"Fresh juice in 10 seconds."' },
       { name: "url", type: "string", rule: "https address of the product page. Links the team publishes point here.", example: '"https://shop.cr/p/juicer"' },
       { name: "images", type: "string list", rule: "Up to 10 public https addresses.", example: '["https://…/a.jpg"]' },
+      { name: "compareAtPrice", type: "number", rule: "Price before the offer, same currency. Templates show it struck through.", example: "29900" },
     ],
     fullBody: "Full example body",
     minimal: "Minimal request with curl",
@@ -351,6 +377,21 @@ const en: DocsText = {
       ["ad", "Meta Ads", "Instagram, Facebook", "Image or video for a paid ad."],
     ],
     tip: "For one image use `post`; for several, `carousel`; for a video, `reel`.",
+  },
+  templates: {
+    title: "Templates and brand",
+    lead: "A template turns the product photo into an ad: the photo, a headline, the price and a button, in the account's colors and logo. The words and the price are drawn by code, never by an image model: the published price is always the real one. The image lives at a public Nexopix address (`/api/creative/{piece}/{version}.jpg`) that Instagram downloads when publishing.",
+    listTitle: "List the templates",
+    listLead: "Returns the templates with their name and description in the language asked for and the formats each one draws (image, carousel and story; not reel or ad yet).",
+    request: "Request",
+    response: "Response 200",
+    brandTitle: "Send an account's brand",
+    brandLead: "The system that owns the brand sends it once: logo (public https address, ideally a PNG with a transparent background), main and accent colors (#RRGGBB) and the default template. Every field is optional; what is not sent is left empty.",
+    brandBody: "Example body",
+    notes: [
+      "Brand responses: 200 `{ \"ok\": true }`, 404 `account_unknown`, 422 `logo_not_https`, `color_invalid` or `template_unknown`.",
+      "The Nexopix panel shows the drawn image in each piece's sheet and lets the person change the template, headline and button before approving.",
+    ],
   },
   errors: {
     title: "Errors",
@@ -390,6 +431,10 @@ const en: DocsText = {
       ["source_invalid", "The source allows lowercase letters, numbers and hyphens, up to 40 characters.", "`source` with other symbols."],
       ["notes_too_long", "Notes allow up to 500 characters.", "`notes` too long."],
       ["mode_invalid", "mode must be auto or manual.", "`mode` with another value."],
+      ["template_unknown", "There is no template called X.", "`template` not in `GET /api/templates`."],
+      ["template_format", "The template X does not draw the format Y.", "The template does not fit that format (a reel, for instance)."],
+      ["creative_invalid", "creative allows headline, cta, showPrice and benefits…", "`creative` with extra or oversized fields."],
+      ["product_compare_price", "The previous price must be a number of zero or more.", "`product.compareAtPrice` negative or sent as text."],
     ],
   },
   practices: {

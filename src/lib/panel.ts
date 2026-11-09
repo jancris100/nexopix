@@ -1,7 +1,9 @@
 import { and, asc, between, desc, eq, isNotNull, lte, min } from "drizzle-orm";
 import { getDb, isTestDatabase } from "../db";
 import { accounts, agendaItems, agents, approvals, ownerProfile, pieceEvents, pieceResults, pieces } from "../db/schema";
-import { cleanContent, fullCaption, latestVersion, versionsOf, writeVersion, type ContentIssue, type ContentValues } from "./content";
+import { cleanContent, fullCaption, latestVersion, nextVersion, versionsOf, writeVersion, type ContentIssue, type ContentValues } from "./content";
+import { absoluteMedia, cleanColor, cleanCreative, creativePath, isCreativePath, isTemplate, TEMPLATES, type Creative, type TemplateId } from "./templates";
+import type { RenderInput } from "./render";
 import { recordEvent, STAGE_ACTORS } from "./events";
 import { addDays, costaRicaTime, isDate, mondayOf, todayInCostaRica } from "./dates";
 import { normalizeHandle } from "./handles";
@@ -16,6 +18,7 @@ const accountColumns = {
   id: accounts.id, handle: accounts.handle, network: accounts.network, brand: accounts.brand, scene: accounts.scene, linked: accounts.linked,
   website: accounts.website, voice: accounts.voice, offer: accounts.offer, audience: accounts.audience, neverPromise: accounts.neverPromise,
   businessInfo: accounts.businessInfo, avatarUrl: accounts.avatarUrl, followers: accounts.followers, tokenExpiresAt: accounts.tokenExpiresAt,
+  logoUrl: accounts.logoUrl, brandColor: accounts.brandColor, accentColor: accounts.accentColor, defaultTemplate: accounts.defaultTemplate,
 };
 
 const REVIEW = 2;
@@ -234,7 +237,10 @@ export async function createRequest(request: Partial<Request>, scheduledOn?: str
       .values({ pipeline: FORMATS[format].pipeline, title, format, accountId: account.id, scene: account.scene, origin: source, externalRef: brief.reference, brief: { ...brief, source } })
       .returning({ id: pieces.id });
     if (day) await tx.insert(agendaItems).values({ scheduledOn: day, time: "12:00", title, format, accountId: account.id, pieceId: piece.id });
-    await writeVersion(tx, piece.id, { idea: [title, brief.notes].filter(Boolean).join("\n"), caption: "", hashtags: "", media: brief.media }, "router");
+    const fallback = account.defaultTemplate && isTemplate(account.defaultTemplate) && (TEMPLATES[account.defaultTemplate].formats as readonly string[]).includes(format) && brief.media.length > 0 ? account.defaultTemplate : null;
+    const template = brief.template ?? fallback;
+    const media = template ? [creativePath(piece.id, 1), ...brief.media] : brief.media;
+    await writeVersion(tx, piece.id, { idea: [title, brief.notes].filter(Boolean).join("\n"), caption: "", hashtags: "", media }, "router", null, { template, creative: brief.creative, version: 1 });
     await recordEvent(tx, piece.id, "received", "gatekeeper", { source, reference: brief.reference, media: brief.media.length, product: brief.product?.name ?? null }, traceId);
     await recordEvent(tx, piece.id, "routed", "router", { pipeline: FORMATS[format].pipeline, account: account.handle, format, manual, publishOn: day ?? null }, traceId);
     return piece.id;
@@ -287,8 +293,8 @@ export async function pieceTrace(pieceId: number) {
 /** The accounts a sender may choose from, with the formats each network takes. Never tokens. */
 export async function publicAccounts() {
   const db = await getDb();
-  const rows = await db.select({ id: accounts.id, handle: accounts.handle, network: accounts.network, brand: accounts.brand, linked: accounts.linked }).from(accounts).orderBy(asc(accounts.handle));
-  return rows.map((row) => ({ id: row.id, handle: row.handle, network: row.network, brand: row.brand, connected: row.linked, formats: formatsFor(row.network) }));
+  const rows = await db.select({ id: accounts.id, handle: accounts.handle, network: accounts.network, brand: accounts.brand, linked: accounts.linked, defaultTemplate: accounts.defaultTemplate }).from(accounts).orderBy(asc(accounts.handle));
+  return rows.map((row) => ({ id: row.id, handle: row.handle, network: row.network, brand: row.brand, connected: row.linked, formats: formatsFor(row.network), defaultTemplate: row.defaultTemplate }));
 }
 
 /** The connected Instagram accounts with their opened token: server only, never sent to the screen. */
@@ -370,6 +376,7 @@ export async function pieceDetail(pieceId: number) {
     publishOn: piece.brief?.publishOn ?? null,
     product: piece.brief?.product ?? null,
     account: account ?? null,
+    templates: (Object.keys(TEMPLATES) as TemplateId[]).filter((id) => (TEMPLATES[id].formats as readonly string[]).includes(piece.format)),
     versions: versions.map((version) => ({ ...version, createdAt: version.createdAt.toISOString() })),
     events,
   };
@@ -379,16 +386,28 @@ export async function pieceDetail(pieceId: number) {
  * A new version of the content, written in the name of the agent of the stage (the person while in review). A
  * published piece is not edited.
  */
-export async function savePieceContent(pieceId: number, values: Partial<ContentValues>, note?: string): Promise<ContentIssue | "published" | "missing" | null> {
+export async function savePieceContent(
+  pieceId: number,
+  values: Partial<ContentValues> & { template?: string | null; creative?: Creative },
+  note?: string,
+): Promise<ContentIssue | "published" | "missing" | "template_invalid" | null> {
   const db = await getDb();
   const cleaned = cleanContent(values);
   if ("issue" in cleaned) return cleaned.issue;
+  const template = values.template ? (isTemplate(values.template) ? values.template : null) : null;
+  if (values.template && !template) return "template_invalid";
+  const creative = cleanCreative(values.creative);
+  if (creative === null) return "template_invalid";
   return db.transaction(async (tx) => {
-    const [piece] = await tx.select({ stage: pieces.stage }).from(pieces).where(eq(pieces.id, pieceId));
+    const [piece] = await tx.select({ stage: pieces.stage, format: pieces.format }).from(pieces).where(eq(pieces.id, pieceId));
     if (!piece) return "missing";
     if (piece.stage >= PUBLISHED) return "published";
+    if (template && !(TEMPLATES[template].formats as readonly string[]).includes(piece.format)) return "template_invalid";
     const author = STAGE_ACTORS[piece.stage];
-    const version = await writeVersion(tx, pieceId, cleaned.content, author, note?.trim().slice(0, 300) || null);
+    const number = await nextVersion(tx, pieceId);
+    const originals = cleaned.content.media.filter((item) => !isCreativePath(item));
+    const content = { ...cleaned.content, media: template ? [creativePath(pieceId, number), ...originals] : originals };
+    const version = await writeVersion(tx, pieceId, content, author, note?.trim().slice(0, 300) || null, { template, creative, version: number });
     await recordEvent(tx, pieceId, "content_updated", author, { version });
     return null;
   });
@@ -412,7 +431,7 @@ export async function publishPiece(pieceId: number, trigger: "manual" | "schedul
   if (account.expired) return fail("token_expired", "El permiso de Instagram venció: vuelve a conectar la cuenta en Redes.");
   const content = await latestVersion(db, pieceId);
   try {
-    const result = await publishMedia(account.userId, account.token, { format: piece.format, media: content?.media ?? [], caption: content ? fullCaption(content) : piece.title });
+    const result = await publishMedia(account.userId, account.token, { format: piece.format, media: absoluteMedia(content?.media ?? []), caption: content ? fullCaption(content) : piece.title });
     await db.transaction(async (tx) => {
       await tx.update(pieces).set({ stage: PUBLISHED, permalink: result.permalink, externalMediaId: result.mediaId }).where(eq(pieces.id, pieceId));
       await tx.update(agendaItems).set({ done: true }).where(eq(agendaItems.pieceId, pieceId));
@@ -439,4 +458,55 @@ export async function publishDue(limit = 5) {
   const results = [];
   for (const piece of due) results.push({ id: piece.id, ...(await publishPiece(piece.id, "schedule")) });
   return results;
+}
+
+export type BrandKit = { logoUrl?: string | null; brandColor?: string | null; accentColor?: string | null; defaultTemplate?: string | null };
+
+/** The brand kit the templates draw with. Returns what does not fit, or null when saved. */
+export async function saveBrandKit(accountId: string, kit: BrandKit): Promise<"account_unknown" | "logo_not_https" | "color_invalid" | "template_unknown" | null> {
+  const logo = kit.logoUrl ? String(kit.logoUrl).trim() : "";
+  if (logo && !/^https:\/\/\S+$/.test(logo)) return "logo_not_https";
+  const brandColor = kit.brandColor ? cleanColor(kit.brandColor) : null;
+  const accentColor = kit.accentColor ? cleanColor(kit.accentColor) : null;
+  if ((kit.brandColor && !brandColor) || (kit.accentColor && !accentColor)) return "color_invalid";
+  const template = kit.defaultTemplate ? String(kit.defaultTemplate) : null;
+  if (template && !isTemplate(template)) return "template_unknown";
+  const db = await getDb();
+  const updated = await db
+    .update(accounts)
+    .set({ logoUrl: logo || null, brandColor, accentColor, defaultTemplate: template })
+    .where(eq(accounts.id, accountId))
+    .returning({ id: accounts.id });
+  return updated.length === 0 ? "account_unknown" : null;
+}
+
+/** What the renderer needs to draw version `version` of a piece; null when that version has no template. */
+export async function creativeInput(pieceId: number, version: number): Promise<RenderInput | null> {
+  const db = await getDb();
+  const [row] = await db
+    .select({ format: pieces.format, title: pieces.title, brief: pieces.brief, accountId: pieces.accountId })
+    .from(pieces)
+    .where(eq(pieces.id, pieceId));
+  if (!row) return null;
+  const versions = await versionsOf(db, pieceId);
+  const current = versions.find((item) => item.version === version);
+  if (!current?.template || !isTemplate(current.template)) return null;
+  const [account] = await db
+    .select({ brand: accounts.brand, logoUrl: accounts.logoUrl, brandColor: accounts.brandColor, accentColor: accounts.accentColor })
+    .from(accounts)
+    .where(eq(accounts.id, row.accountId));
+  const product = row.brief?.product ?? null;
+  const photo = current.media.find((item) => !isCreativePath(item) && !/\.(mp4|mov|m4v)(\?|#|$)/i.test(item)) ?? null;
+  return {
+    template: current.template,
+    format: row.format,
+    photo,
+    name: product?.name ?? row.title,
+    price: product?.price ?? null,
+    currency: product?.currency ?? null,
+    compareAtPrice: product?.compareAtPrice ?? null,
+    description: product?.description ?? null,
+    creative: current.creative ?? {},
+    brand: { name: account?.brand ?? "", logoUrl: account?.logoUrl ?? null, color: account?.brandColor ?? null, accent: account?.accentColor ?? null },
+  };
 }

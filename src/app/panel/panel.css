@@ -374,3 +374,23 @@ button.history__row:hover { border-color: var(--line-2); box-shadow: 0 8px 22px 
   .piece-sheet__content { grid-template-columns: minmax(0, 1fr); }
   .piece-preview__media { aspect-ratio: 1.2; }
 }
+
+.piece-design { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.piece-design legend { padding: 0 6px; color: var(--ink); font-size: 13px; font-weight: 600; }
+.piece-design label:first-of-type { grid-column: 1 / -1; }
+.piece-design select { width: 100%; height: 42px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--card); color: var(--ink); font: inherit; font-size: 14.5px; }
+.piece-design small { grid-column: 1 / -1; }
+.piece-design__check { display: flex !important; align-items: center; gap: 8px; grid-column: 1 / -1; color: var(--ink) !important; }
+.piece-design__check input { width: auto !important; }
+
+.brandkit { border-top: 1px dashed var(--line); }
+.brandkit__logo { display: flex; align-items: center; gap: 10px; }
+.brandkit__logo img { width: 44px; height: 44px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; object-fit: contain; background: var(--paper); }
+.brandkit__logo input { flex: 1; }
+.brandkit__color { display: flex; align-items: center; gap: 10px; }
+.brandkit__color input[type="color"] { width: 48px; height: 40px; padding: 2px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--card); }
+.brandkit__color code { color: var(--ink); font-size: 13px; }
+.brandkit select { height: 42px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--card); color: var(--ink); font: inherit; }
+.piece-preview__drawn { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; background: var(--paper); }
+.piece-preview__thumbs { display: flex; gap: 6px; padding: 8px 10px 0; }
+.piece-preview__thumbs img, .piece-preview__thumbs video { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; }

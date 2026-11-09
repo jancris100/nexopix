@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { getDb } from "../db";
 import { pieceVersions } from "../db/schema";
+import { isCreativePath, type Creative } from "./templates";
 
 type Db = Awaited<ReturnType<typeof getDb>>;
 type Tx = Pick<Db, "insert" | "select">;
@@ -35,7 +36,7 @@ export function cleanContent(values: Partial<ContentValues>): { content: Content
   if (caption.length + (hashtags ? hashtags.length + 2 : 0) > CONTENT_LIMITS.caption) return { issue: "caption_too_long" };
   if (hashtags.split(" ").filter(Boolean).length > CONTENT_LIMITS.hashtags) return { issue: "too_many_hashtags" };
   if (media.length > CONTENT_LIMITS.media) return { issue: "too_many_media" };
-  if (!media.every(isHttps)) return { issue: "media_not_https" };
+  if (!media.every((item) => isHttps(item) || isCreativePath(item))) return { issue: "media_not_https" };
   return { content: { idea, caption, hashtags, media } };
 }
 
@@ -44,11 +45,21 @@ export async function latestVersion(db: Pick<Db, "select">, pieceId: number) {
   return row ?? null;
 }
 
-/** Writes the next version of a piece and returns its number. */
-export async function writeVersion(db: Tx, pieceId: number, content: ContentValues, author: string, note?: string | null) {
-  const current = await latestVersion(db, pieceId);
-  const version = (current?.version ?? 0) + 1;
-  await db.insert(pieceVersions).values({ pieceId, version, ...content, author, note: note ?? null });
+export async function nextVersion(db: Pick<Db, "select">, pieceId: number) {
+  return ((await latestVersion(db, pieceId))?.version ?? 0) + 1;
+}
+
+/** Writes a version of a piece (the next one unless given) and returns its number. */
+export async function writeVersion(
+  db: Tx,
+  pieceId: number,
+  content: ContentValues,
+  author: string,
+  note?: string | null,
+  design?: { template: string | null; creative: Creative | null; version?: number },
+) {
+  const version = design?.version ?? (await nextVersion(db, pieceId));
+  await db.insert(pieceVersions).values({ pieceId, version, ...content, author, note: note ?? null, template: design?.template ?? null, creative: design?.creative ?? null });
   return version;
 }
 

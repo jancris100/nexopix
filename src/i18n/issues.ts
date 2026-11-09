@@ -2,7 +2,7 @@ import type { Issue, IssueCode } from "../lib/gatekeeper";
 import type { Locale } from "./locale";
 
 /** Errors of the API itself, before the Portero looks at a request. */
-export type ApiErrorCode = "api_disabled" | "invalid_key" | "body_not_json" | "not_found" | "reference_missing" | "id_invalid";
+export type ApiErrorCode = "api_disabled" | "invalid_key" | "body_not_json" | "not_found" | "reference_missing" | "id_invalid" | "logo_not_https" | "color_invalid";
 
 type Params = Record<string, string | number>;
 type Messages = Record<IssueCode | ApiErrorCode, (params: Params) => string>;
@@ -31,12 +31,18 @@ const en: Messages = {
   date_invalid: () => "The date must look like YYYY-MM-DD.",
   date_past: () => "The requested date has already passed.",
   notes_too_long: (p) => `Notes allow up to ${p.max} characters.`,
+  template_unknown: (p) => `There is no template called ${p.template}.`,
+  template_format: (p) => `The template ${p.template} does not draw the format ${p.format}.`,
+  creative_invalid: () => "creative allows headline (up to 60), cta (up to 24), showPrice (true or false) and up to 3 benefits of 48 characters.",
+  product_compare_price: () => "The previous price must be a number of zero or more.",
   api_disabled: () => "The API is not enabled yet.",
   invalid_key: () => "Invalid key.",
   body_not_json: () => "The body must be a JSON object.",
   not_found: () => "That request does not exist.",
   reference_missing: () => "The reference is missing.",
   id_invalid: () => "That request does not exist.",
+  logo_not_https: () => "The logo must be a public https address.",
+  color_invalid: () => "Colors must look like #RRGGBB.",
 };
 
 const es: Messages = {
@@ -63,12 +69,18 @@ const es: Messages = {
   date_invalid: () => "La fecha debe tener la forma AAAA-MM-DD.",
   date_past: () => "La fecha deseada ya pasó.",
   notes_too_long: (p) => `Las notas admiten hasta ${p.max} caracteres.`,
+  template_unknown: (p) => `No existe la plantilla ${p.template}.`,
+  template_format: (p) => `La plantilla ${p.template} no dibuja el formato ${p.format}.`,
+  creative_invalid: () => "creative admite headline (hasta 60), cta (hasta 24), showPrice (true o false) y hasta 3 beneficios de 48 caracteres.",
+  product_compare_price: () => "El precio anterior debe ser un número de cero o más.",
   api_disabled: () => "La API todavía no está habilitada.",
   invalid_key: () => "Clave no válida.",
   body_not_json: () => "El cuerpo debe ser un objeto JSON.",
   not_found: () => "No existe esa petición.",
   reference_missing: () => "Falta la referencia.",
   id_invalid: () => "No existe esa petición.",
+  logo_not_https: () => "El logo debe ser una dirección https pública.",
+  color_invalid: () => "Los colores deben tener la forma #RRGGBB.",
 };
 
 export const ISSUE_MESSAGES: Record<Locale, Messages> = { en, es };

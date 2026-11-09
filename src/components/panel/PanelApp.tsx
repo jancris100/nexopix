@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, useTransition, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
-import { addAccount, addPublication, advance, decide, instagramPosts, postInsights, removeAccount, saveProfile, toggleAgent, toggleItem, weekAgenda } from "../../app/panel/actions";
+import { addAccount, addPublication, advance, decide, instagramPosts, postInsights, removeAccount, saveBrandKit, saveProfile, toggleAgent, toggleItem, weekAgenda } from "../../app/panel/actions";
 import { useI18n } from "../../i18n/client";
 import type { Dictionary } from "../../i18n/dictionaries";
 import { addDays, costaRicaTime, mondayOf, monthLabel, shortDate, todayInCostaRica, weekNumber, weekRange } from "../../lib/dates";
@@ -647,7 +647,12 @@ function Networks({ snap, busy, onRemove, onSaved }: { snap: Snapshot; busy: boo
                 <button type="button" className="np-btn" disabled={busy} onClick={() => onRemove(account.id)}>{account.linked ? t.networks.disconnect : t.networks.remove}</button>
               </div>
             </div>
-            {expanded && <Profile account={account} onSaved={onSaved} />}
+            {expanded && (
+              <>
+                <Profile account={account} onSaved={onSaved} />
+                <BrandKitForm account={account} onSaved={onSaved} />
+              </>
+            )}
           </article>
         );
       })}
@@ -765,6 +770,74 @@ function Profile({ account, onSaved }: { account: Account; onSaved: (snapshot: S
       ))}
       <div className="profile__foot">
         <button type="submit" className="np-btn np-btn--go" disabled={saving}>{t.profile.save}</button>
+        {notice && <p role="status">{notice}</p>}
+      </div>
+    </form>
+  );
+}
+
+/** Logo, colors and default template of an account: what the templates draw with. */
+function BrandKitForm({ account, onSaved }: { account: Account; onSaved: (snapshot: Snapshot) => void }) {
+  const { t } = useI18n();
+  const [values, setValues] = useState({
+    logoUrl: account.logoUrl ?? "",
+    brandColor: account.brandColor ?? "#14161A",
+    accentColor: account.accentColor ?? "#3FBF9A",
+    defaultTemplate: account.defaultTemplate ?? "",
+  });
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, start] = useTransition();
+  const set = (key: keyof typeof values) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setNotice(null);
+    setValues((current) => ({ ...current, [key]: event.target.value }));
+  };
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    start(async () => {
+      try {
+        const result = await saveBrandKit(account.id, { ...values, defaultTemplate: values.defaultTemplate || null, logoUrl: values.logoUrl || null });
+        if (result.snapshot) {
+          onSaved(result.snapshot);
+          setNotice(t.brandKit.saved);
+        } else {
+          setNotice(result.error ?? t.profile.failed);
+        }
+      } catch {
+        setNotice(`${t.profile.failed} ${t.common.retry}`);
+      }
+    });
+  };
+  return (
+    <form className="profile brandkit" onSubmit={submit}>
+      <div className="profile__wide">
+        <strong>{t.brandKit.title}</strong>
+        <p className="np-note">{t.brandKit.lead}</p>
+      </div>
+      <label className="profile__wide">
+        {t.brandKit.logo}
+        <span className="brandkit__logo">
+          {/* eslint-disable-next-line @next/next/no-img-element -- the address the person typed, shown as it is. */}
+          {values.logoUrl.startsWith("https://") && <img src={values.logoUrl} alt="" referrerPolicy="no-referrer" />}
+          <input value={values.logoUrl} onChange={set("logoUrl")} maxLength={500} inputMode="url" placeholder="https://" />
+        </span>
+      </label>
+      <label>
+        {t.brandKit.color}
+        <span className="brandkit__color"><input type="color" value={values.brandColor} onChange={set("brandColor")} /><code>{values.brandColor.toUpperCase()}</code></span>
+      </label>
+      <label>
+        {t.brandKit.accent}
+        <span className="brandkit__color"><input type="color" value={values.accentColor} onChange={set("accentColor")} /><code>{values.accentColor.toUpperCase()}</code></span>
+      </label>
+      <label className="profile__wide">
+        {t.brandKit.template}
+        <select value={values.defaultTemplate} onChange={set("defaultTemplate")}>
+          <option value="">{t.brandKit.none}</option>
+          {Object.keys(t.templates).map((id) => <option key={id} value={id}>{t.templates[id]}</option>)}
+        </select>
+      </label>
+      <div className="profile__foot">
+        <button type="submit" className="np-btn np-btn--go" disabled={saving}>{t.brandKit.save}</button>
         {notice && <p role="status">{notice}</p>}
       </div>
     </form>

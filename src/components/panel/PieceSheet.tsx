@@ -88,19 +88,28 @@ function Content({ detail, approvalId, onDetail, onSnapshot, onDecided }: {
 }) {
   const { t } = useI18n();
   const current: Version | undefined = detail.versions[0];
-  const [values, setValues] = useState({
-    idea: current?.idea ?? "",
-    caption: current?.caption ?? "",
-    hashtags: current?.hashtags ?? "",
-    media: (current?.media ?? []).join("\n"),
+  const fromVersion = (version: Version | undefined) => ({
+    idea: version?.idea ?? "",
+    caption: version?.caption ?? "",
+    hashtags: version?.hashtags ?? "",
+    // The drawn image is added back on saving: only the original files are edited.
+    media: (version?.media ?? []).filter((item) => !item.startsWith("/api/creative/")).join("\n"),
+    template: version?.template ?? "",
+    headline: version?.creative?.headline ?? "",
+    cta: version?.creative?.cta ?? "",
+    showPrice: version?.creative?.showPrice !== false,
   });
+  const [values, setValues] = useState(fromVersion(current));
   const [note, setNote] = useState("");
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, start] = useTransition();
   const locked = detail.stage >= PUBLISHED;
   const author = STAGE_ACTORS[Math.min(detail.stage, 4)];
-  const media = values.media.split("\n").map((line) => line.trim()).filter(Boolean);
-  const set = (key: keyof typeof values) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const originals = values.media.split("\n").map((line) => line.trim()).filter(Boolean);
+  // The preview shows the drawn image of the saved version first, then the photos.
+  const drawn = current?.media.find((item) => item.startsWith("/api/creative/"));
+  const media = drawn && values.template ? [drawn, ...originals] : originals;
+  const set = (key: "idea" | "caption" | "hashtags" | "media" | "template" | "headline" | "cta") => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setNotice(null);
     setValues((previous) => ({ ...previous, [key]: event.target.value }));
   };
@@ -109,7 +118,18 @@ function Content({ detail, approvalId, onDetail, onSnapshot, onDecided }: {
     event.preventDefault();
     start(async () => {
       try {
-        const result = await savePieceContent(detail.id, { ...values, media }, note);
+        const result = await savePieceContent(
+          detail.id,
+          {
+            idea: values.idea,
+            caption: values.caption,
+            hashtags: values.hashtags,
+            media: originals,
+            template: values.template || null,
+            creative: { headline: values.headline, cta: values.cta, showPrice: values.showPrice },
+          },
+          note,
+        );
         if ("error" in result) {
           setNotice({ ok: false, text: result.error ?? t.piece.failed });
           return;
@@ -118,7 +138,7 @@ function Content({ detail, approvalId, onDetail, onSnapshot, onDecided }: {
           onDetail(result.detail);
           // Show what was saved: hashtags and files come back cleaned.
           const saved = result.detail.versions[0];
-          if (saved) setValues({ idea: saved.idea, caption: saved.caption, hashtags: saved.hashtags, media: saved.media.join("\n") });
+          if (saved) setValues(fromVersion(saved));
         }
         onSnapshot(result.snapshot);
         setNote("");
@@ -134,7 +154,21 @@ function Content({ detail, approvalId, onDetail, onSnapshot, onDecided }: {
       <div className="piece-preview">
         <p className="piece-preview__label">{t.piece.preview}</p>
         <div className="piece-preview__card">
-          {media.length > 0 ? (
+          {media[0]?.startsWith("/api/creative/") ? (
+            <>
+              {/* The drawn image is the post: shown alone, at its real proportion; the photos it came from below. */}
+              {/* eslint-disable-next-line @next/next/no-img-element -- drawn by Nexopix, shown as it will be published. */}
+              <img className="piece-preview__drawn" src={media[0]} alt="" />
+              {media.length > 1 && (
+                <div className="piece-preview__thumbs">
+                  {media.slice(1, 7).map((url) =>
+                    // eslint-disable-next-line @next/next/no-img-element -- addresses chosen by the person or the agents.
+                    isVideo(url) ? <video key={url} src={url} muted playsInline preload="metadata" /> : <img key={url} src={url} alt="" referrerPolicy="no-referrer" />,
+                  )}
+                </div>
+              )}
+            </>
+          ) : media.length > 0 ? (
             <div className={`piece-preview__media${media.length > 1 ? " is-many" : ""}`}>
               {media.slice(0, 4).map((url) =>
                 isVideo(url) ? (
@@ -167,6 +201,37 @@ function Content({ detail, approvalId, onDetail, onSnapshot, onDecided }: {
           </div>
         ) : (
           <form className="piece-form" onSubmit={save}>
+            {detail.templates.length > 0 && (
+              <fieldset className="piece-design">
+                <legend>{t.piece.design}</legend>
+                <label>
+                  {t.piece.template}
+                  <select value={values.template} onChange={set("template")}>
+                    <option value="">{t.piece.noTemplate}</option>
+                    {detail.templates.map((id) => <option key={id} value={id}>{t.templates[id] ?? id}</option>)}
+                  </select>
+                </label>
+                {values.template && (
+                  <>
+                    <label>
+                      {t.piece.headline}
+                      <input value={values.headline} onChange={set("headline")} maxLength={60} />
+                      <small>{t.piece.headlineHint}</small>
+                    </label>
+                    <label>
+                      {t.piece.cta}
+                      <input value={values.cta} onChange={set("cta")} maxLength={24} />
+                      <small>{t.piece.ctaHint}</small>
+                    </label>
+                    <label className="piece-design__check">
+                      <input type="checkbox" checked={values.showPrice} onChange={(event) => setValues((previous) => ({ ...previous, showPrice: event.target.checked }))} />
+                      {t.piece.showPrice}
+                    </label>
+                    <small>{t.piece.drawnOnSave}</small>
+                  </>
+                )}
+              </fieldset>
+            )}
             <label>
               {t.piece.idea}
               <textarea value={values.idea} onChange={set("idea")} rows={3} maxLength={2000} />

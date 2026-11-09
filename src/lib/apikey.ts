@@ -10,7 +10,7 @@ const digest = (value: string) => createHash("sha256").update(value).digest();
 export const apiLocale = (request: Request): Locale => pickLocale(null, request.headers.get("accept-language"));
 
 /** Every error has the same shape: a stable code for programs and a message for people. */
-export function apiError(request: Request, status: number, issue: Issue | { code: ApiErrorCode; params?: Record<string, string | number> }) {
+export function apiError(request: Request, status: number, issue: Issue | { code: ApiErrorCode | "account_unknown" | "template_unknown"; params?: Record<string, string | number> }) {
   return NextResponse.json({ error: { code: issue.code, message: issueMessage(issue, apiLocale(request)) } }, { status });
 }
 

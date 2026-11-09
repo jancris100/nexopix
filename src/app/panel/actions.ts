@@ -55,7 +55,11 @@ export async function pieceDetail(pieceId: number) {
 }
 
 /** Saves a new version of the content; the error comes in the language of the screen. */
-export async function savePieceContent(pieceId: number, values: { idea: string; caption: string; hashtags: string; media: string[] }, note?: string) {
+export async function savePieceContent(
+  pieceId: number,
+  values: { idea: string; caption: string; hashtags: string; media: string[]; template?: string | null; creative?: { headline?: string; cta?: string; showPrice?: boolean } },
+  note?: string,
+) {
   const problem = await panel.savePieceContent(pieceId, values, note);
   if (problem) return { error: dictionaryFor(await getLocale()).piece.issues[problem] };
   return { detail: await panel.pieceDetail(pieceId), snapshot: await panel.loadPanel() };
@@ -93,4 +97,9 @@ export async function saveOwner(values: panel.OwnerProfile) {
 
 export async function pieceTrace(pieceId: number) {
   return Number.isInteger(pieceId) ? panel.pieceTrace(pieceId) : [];
+}
+
+export async function saveBrandKit(accountId: string, kit: panel.BrandKit) {
+  const problem = await panel.saveBrandKit(accountId, kit);
+  return problem ? { error: dictionaryFor(await getLocale()).brandKit.issues[problem] } : { snapshot: await panel.loadPanel() };
 }

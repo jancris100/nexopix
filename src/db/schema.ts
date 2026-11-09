@@ -1,5 +1,6 @@
 import { boolean, date, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type { Brief } from "../lib/gatekeeper";
+import type { Creative } from "../lib/templates";
 
 export const accounts = pgTable("accounts", {
   id: text("id").primaryKey(),
@@ -14,6 +15,11 @@ export const accounts = pgTable("accounts", {
   audience: text("audience").notNull().default(""),
   neverPromise: text("never_promise").notNull().default(""),
   businessInfo: text("business_info").notNull().default(""),
+  /** Brand kit used by the templates: logo (public https), main and accent colors (#RRGGBB) and the default template. */
+  logoUrl: text("logo_url"),
+  brandColor: text("brand_color"),
+  accentColor: text("accent_color"),
+  defaultTemplate: text("default_template"),
   /** The network's own id of the account, once connected. */
   externalId: text("external_id").unique(),
   avatarUrl: text("avatar_url"),
@@ -140,6 +146,9 @@ export const pieceVersions = pgTable(
     author: text("author").notNull(),
     /** Why it changed (for instance the reason of a rejection). */
     note: text("note"),
+    /** The template its main image is drawn with, and what the template shows (headline, call to action, price). */
+    template: text("template"),
+    creative: jsonb("creative").$type<Creative>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [uniqueIndex("piece_versions_piece_version").on(table.pieceId, table.version)],

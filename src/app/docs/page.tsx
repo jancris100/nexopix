@@ -57,11 +57,35 @@ const REQUEST_BODY = `{
     "images": [
       "https://shop.cr/img/juicer-1.jpg",
       "https://shop.cr/img/juicer-2.jpg"
-    ]
+    ],
+    "compareAtPrice": 15900
   },
   "publishOn": "2026-11-20",
-  "notes": "15% off until December 31"
+  "notes": "15% off until December 31",
+  "template": "offer",
+  "creative": { "headline": "December juicer promo", "cta": "Buy now", "showPrice": true }
 }`;
+
+const CURL_TEMPLATES = `curl ${BASE}/api/templates \\
+  -H "x-api-key: YOUR_KEY" \\
+  -H "accept-language: es"`;
+
+const TEMPLATES_RESPONSE = `{
+  "templates": [
+    { "id": "offer", "name": "Oferta", "description": "Precio grande, el precio anterior tachado y un llamado a comprar.", "formats": ["post", "carousel", "story"] },
+    { "id": "launch", "name": "Lanzamiento", "description": "…", "formats": ["post", "carousel", "story"] }
+  ]
+}`;
+
+const BRAND_BODY = `curl -X PUT ${BASE}/api/accounts/ig-17841400000000000/brand \\
+  -H "x-api-key: YOUR_KEY" \\
+  -H "content-type: application/json" \\
+  -d '{
+    "logoUrl": "https://shop.cr/logo.png",
+    "brandColor": "#0B1F3A",
+    "accentColor": "#FFB020",
+    "defaultTemplate": "offer"
+  }'`;
 
 const CURL_REQUEST = `curl ${BASE}/api/requests \\
   -H "x-api-key: YOUR_KEY" \\
@@ -219,7 +243,7 @@ export default async function ApiDocs() {
     </div>
   );
 
-  const Endpoint = ({ method, path }: { method: "GET" | "POST"; path: string }) => (
+  const Endpoint = ({ method, path }: { method: "GET" | "POST" | "PUT"; path: string }) => (
     <p className="endpoint">
       <b className={`endpoint__method is-${method.toLowerCase()}`}>{method}</b>
       <code>{path}</code>
@@ -327,6 +351,21 @@ export default async function ApiDocs() {
               </table>
             </div>
             <p>{rich(doc.formats.tip)}</p>
+          </section>
+
+          <section id="templates">
+            <h2>{doc.templates.title}</h2>
+            <p>{rich(doc.templates.lead)}</p>
+            <h3>{doc.templates.listTitle}</h3>
+            <Endpoint method="GET" path="/api/templates" />
+            <p>{doc.templates.listLead}</p>
+            <Code label={doc.templates.request} code={CURL_TEMPLATES} />
+            <Code label={doc.templates.response} code={TEMPLATES_RESPONSE} />
+            <h3>{doc.templates.brandTitle}</h3>
+            <Endpoint method="PUT" path="/api/accounts/{id}/brand" />
+            <p>{doc.templates.brandLead}</p>
+            <Code label={doc.templates.brandBody} code={BRAND_BODY} />
+            <ul className="plain">{doc.templates.notes.map((note) => <li key={note}>{rich(note)}</li>)}</ul>
           </section>
 
           <section id="errors">
