@@ -587,6 +587,7 @@ function Trace({ piece, onClose }: { piece: Piece; onClose: () => void }) {
   const { t, locale } = useI18n();
   const [events, setEvents] = useState<TraceEvent[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -606,6 +607,19 @@ function Trace({ piece, onClose }: { piece: Piece; onClose: () => void }) {
 
   const when = new Intl.DateTimeFormat(t.locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Costa_Rica" });
   const source = events?.find((event) => event.type === "received")?.detail;
+  const reference = source?.reference ? String(source.reference) : null;
+  // Long references (intenexo:<company>:<request>) read better by their end; the whole one is one click away.
+  const shortReference = reference && reference.length > 24 ? `…${reference.slice(-12)}` : reference;
+  const copy = async () => {
+    if (!reference) return;
+    try {
+      await navigator.clipboard.writeText(reference);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  };
   return (
     <div className="np-scrim" onClick={(event) => event.target === event.currentTarget && onClose()}>
       <section role="dialog" aria-modal="true" aria-label={t.trace.title} className="sheet trace" lang={locale}>
@@ -616,7 +630,20 @@ function Trace({ piece, onClose }: { piece: Piece; onClose: () => void }) {
           </div>
           <button type="button" className="sheet__close" aria-label={t.common.close} onClick={onClose} autoFocus>×</button>
         </div>
-        <p className="np-note">{t.trace.lead(piece.id)}{source?.source ? ` ${t.trace.from(String(source.source), source.reference ? String(source.reference) : null)}` : ""}</p>
+        <dl className="trace__meta">
+          <div><dt>{t.trace.piece(piece.id)}</dt><dd>{t.trace.lead}</dd></div>
+          {source?.source && <div><dt>{t.trace.source}</dt><dd>{String(source.source).toUpperCase()}</dd></div>}
+          {reference && (
+            <div>
+              <dt>{t.trace.reference}</dt>
+              <dd>
+                <code title={reference}>{shortReference}</code>
+                <button type="button" className="trace__copy" onClick={copy} aria-label={t.trace.copy} title={t.trace.copy}>{copied ? t.trace.copied : "⧉"}</button>
+              </dd>
+            </div>
+          )}
+          {events && <div><dt>{t.trace.steps(events.length)}</dt><dd /></div>}
+        </dl>
         {failed && <p className="np-alert" role="alert">{t.trace.failed}</p>}
         {!events && !failed && <p className="np-note" aria-live="polite">{t.trace.loading}</p>}
         {events?.length === 0 && <p className="np-note">{t.trace.empty}</p>}
