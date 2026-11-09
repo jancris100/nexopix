@@ -174,3 +174,91 @@ export async function mediaInsights(mediaId: string, token: string): Promise<{ i
   }
   return { insights, reason: null };
 }
+
+/** Why a publication did not go out. The code is stable; the message is Meta's own words when it gives them. */
+export class PublishError extends Error {
+  constructor(public readonly code: string, message: string) {
+    super(message);
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const isVideoUrl = (url: string) => /\.(mp4|mov|m4v)(\?|#|$)/i.test(url);
+
+async function graphPost(path: string, params: Record<string, string>, token: string) {
+  const response = await fetch(`${GRAPH}/${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ ...params, access_token: token }),
+    cache: "no-store",
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || body.error) throw new PublishError("meta_refused", String(body.error?.error_user_msg ?? body.error?.message ?? `Meta answered ${response.status}`));
+  return body as { id?: string };
+}
+
+async function graphGet(path: string, fields: string, token: string) {
+  const url = new URL(`${GRAPH}/${path}`);
+  url.searchParams.set("fields", fields);
+  url.searchParams.set("access_token", token);
+  const response = await fetch(url, { cache: "no-store" });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || body.error) throw new PublishError("meta_refused", String(body.error?.message ?? `Meta answered ${response.status}`));
+  return body as Record<string, string>;
+}
+
+/** Videos are processed by Meta before they can be published: waits until the container is ready (about 50 s at most). */
+async function waitUntilReady(containerId: string, token: string) {
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const { status_code: status } = await graphGet(containerId, "status_code", token);
+    if (status === "FINISHED") return;
+    if (status === "ERROR" || status === "EXPIRED") throw new PublishError("media_failed", "Instagram no pudo procesar el video. Revisa que sea MP4 vertical de menos de 15 minutos.");
+    await sleep(3000);
+  }
+  throw new PublishError("media_processing", "Instagram sigue procesando el video. Vuelve a intentar en un minuto.");
+}
+
+/**
+ * Publishes on an Instagram professional account through the Content Publishing API: a container per file, then
+ * media_publish. Images must be public JPEG addresses; videos public MP4. Returns the media id and its permalink.
+ */
+export async function publishMedia(userId: string, token: string, input: { format: string; media: string[]; caption: string }) {
+  const { format, media, caption } = input;
+  const owner = encodeURIComponent(userId);
+  if (format === "ad") throw new PublishError("ad_not_publishable", "Los anuncios de Meta Ads no se publican como publicación normal: créalos en el Administrador de anuncios.");
+  if (media.length === 0) throw new PublishError("media_missing", "La pieza no tiene imágenes ni video para publicar.");
+
+  let container: string;
+  let hasVideo = false;
+  if (format === "carousel") {
+    if (media.length < 2) throw new PublishError("media_missing", "Un carrusel necesita de 2 a 10 imágenes.");
+    const children: string[] = [];
+    for (const url of media.slice(0, 10)) {
+      const video = isVideoUrl(url);
+      hasVideo ||= video;
+      const child = await graphPost(`${owner}/media`, video ? { is_carousel_item: "true", media_type: "VIDEO", video_url: url } : { is_carousel_item: "true", image_url: url }, token);
+      children.push(String(child.id));
+    }
+    if (hasVideo) for (const child of children) await waitUntilReady(child, token);
+    container = String((await graphPost(`${owner}/media`, { media_type: "CAROUSEL", children: children.join(","), caption }, token)).id);
+  } else if (format === "reel") {
+    const url = media.find(isVideoUrl);
+    if (!url) throw new PublishError("media_missing", "Un reel necesita un video MP4.");
+    hasVideo = true;
+    container = String((await graphPost(`${owner}/media`, { media_type: "REELS", video_url: url, caption, share_to_feed: "true" }, token)).id);
+  } else if (format === "story") {
+    const url = media[0];
+    hasVideo = isVideoUrl(url);
+    container = String((await graphPost(`${owner}/media`, hasVideo ? { media_type: "STORIES", video_url: url } : { media_type: "STORIES", image_url: url }, token)).id);
+  } else {
+    const url = media.find((item) => !isVideoUrl(item));
+    if (!url) throw new PublishError("media_missing", "Una publicación necesita una imagen JPEG.");
+    container = String((await graphPost(`${owner}/media`, { image_url: url, caption }, token)).id);
+  }
+  if (hasVideo) await waitUntilReady(container, token);
+
+  const published = await graphPost(`${owner}/media_publish`, { creation_id: container }, token);
+  const mediaId = String(published.id);
+  const permalink = await graphGet(mediaId, "permalink", token).then((body) => body.permalink ?? null).catch(() => null);
+  return { mediaId, permalink };
+}

@@ -45,9 +45,32 @@ export async function advance(id: number) {
   return panel.loadPanel();
 }
 
-export async function decide(id: number, approved: boolean) {
-  await panel.decideApproval(id, approved);
+export async function decide(id: number, approved: boolean, decision?: panel.Decision) {
+  await panel.decideApproval(id, approved, decision);
   return panel.loadPanel();
+}
+
+export async function pieceDetail(pieceId: number) {
+  return Number.isInteger(pieceId) ? panel.pieceDetail(pieceId) : null;
+}
+
+/** Saves a new version of the content; the error comes in the language of the screen. */
+export async function savePieceContent(pieceId: number, values: { idea: string; caption: string; hashtags: string; media: string[] }, note?: string) {
+  const problem = await panel.savePieceContent(pieceId, values, note);
+  if (problem) return { error: dictionaryFor(await getLocale()).piece.issues[problem] };
+  return { detail: await panel.pieceDetail(pieceId), snapshot: await panel.loadPanel() };
+}
+
+/** "Publish now": the scheduler publishes the piece without waiting for its moment. */
+export async function publishNow(pieceId: number) {
+  const result = await panel.publishPiece(pieceId, "manual");
+  const t = dictionaryFor(await getLocale()).piece;
+  return {
+    ok: result.ok,
+    message: result.ok ? t.published : t.publishFailed(result.message || t.issues[result.code as keyof typeof t.issues] || result.code),
+    detail: await panel.pieceDetail(pieceId),
+    snapshot: await panel.loadPanel(),
+  };
 }
 
 export async function saveProfile(id: string, profile: panel.BrandProfile) {

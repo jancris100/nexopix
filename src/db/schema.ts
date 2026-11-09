@@ -50,6 +50,10 @@ export const pieces = pgTable(
     /** What the request carried once checked: product, files, desired date and notes. */
     brief: jsonb("brief").$type<Brief>(),
     permalink: text("permalink"),
+    /** When the scheduler publishes it (set on approval). */
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+    /** The Instagram media id once published. */
+    externalMediaId: text("external_media_id"),
   },
   (table) => [index("pieces_pipeline_stage").on(table.pipeline, table.stage), uniqueIndex("pieces_origin_ref").on(table.origin, table.externalRef)],
 );
@@ -64,6 +68,8 @@ export const agendaItems = pgTable(
     format: text("format").notNull(),
     accountId: text("account_id").notNull().references(() => accounts.id),
     done: boolean("done").notNull().default(false),
+    /** The piece this slot publishes, when it comes from one. */
+    pieceId: integer("piece_id").references(() => pieces.id),
   },
   (table) => [index("agenda_scheduled_on").on(table.scheduledOn)],
 );
@@ -114,4 +120,27 @@ export const pieceEvents = pgTable(
     traceId: text("trace_id"),
   },
   (table) => [index("piece_events_piece").on(table.pieceId, table.at)],
+);
+
+/**
+ * The content of a piece, one row per version: the idea of the strategist, the copy of the writer and the files.
+ * A new version is written every time someone (an agent or the person) changes it; the last one is what gets published.
+ */
+export const pieceVersions = pgTable(
+  "piece_versions",
+  {
+    id: serial("id").primaryKey(),
+    pieceId: integer("piece_id").notNull().references(() => pieces.id),
+    version: integer("version").notNull(),
+    idea: text("idea").notNull().default(""),
+    caption: text("caption").notNull().default(""),
+    hashtags: text("hashtags").notNull().default(""),
+    media: jsonb("media").$type<string[]>().notNull().default([]),
+    /** Who wrote this version: strategist, writer, human… */
+    author: text("author").notNull(),
+    /** Why it changed (for instance the reason of a rejection). */
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("piece_versions_piece_version").on(table.pieceId, table.version)],
 );

@@ -11,7 +11,9 @@ export type EventType =
   | "approved"
   | "rejected"
   | "scheduled"
-  | "published";
+  | "published"
+  | "content_updated"
+  | "publish_failed";
 
 /** Who acted: the gatekeeper and the router at the door, an agent of the pipeline, or the person. */
 export type Actor = "gatekeeper" | "router" | "strategist" | "writer" | "human" | "scheduler" | "analyst";

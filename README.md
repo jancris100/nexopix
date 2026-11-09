@@ -25,6 +25,7 @@ Sin `DATABASE_URL` el panel usa un Postgres embebido (`.data/`) con datos de pru
 | `NEXOPIX_API_KEY` | Habilita la API para otros sistemas (encabezado `x-api-key`): `GET /api/accounts`, `POST /api/requests`, `GET /api/requests/{id}` y `GET /api/requests?source=&reference=`. La API siempre está en inglés; los mensajes de error salen en español con `accept-language: es`. Documentación completa en `/docs`. |
 | `NEXOPIX_PANEL_PASSWORD` | Contraseña del panel. Sin ella el panel queda abierto y no se pueden conectar redes reales. |
 | `NEXOPIX_SECRET` | Clave de al menos 32 caracteres: firma la sesión y cifra los permisos de las redes. |
+| `CRON_SECRET` | Activa `GET /api/cron/publish` (encabezado `Authorization: Bearer <CRON_SECRET>`): el Programador publica en Instagram las piezas aprobadas cuya hora llegó. Vercel Cron lo llama una vez al día (`vercel.json`); para publicar a la hora exacta, llámelo cada 5 a 15 minutos desde otro programador. |
 | `META_APP_SECRET` | Clave secreta de la app de Meta (inicio de sesión unificado de Instagram). El ID de la app y el de la configuración ya vienen en el código; se cambian con `META_APP_ID` y `META_CONFIG_ID`. Redirección: `https://<dominio>/api/meta/callback`. |
 
 ## En el teléfono

@@ -153,7 +153,7 @@ const es: DocsText = {
       "`status`: una de las etapas del Recorrido de una petición.",
       "`permalink`: vacío (`null`) hasta que esté publicada.",
       "`receivedAt`: el momento en que entró, en UTC.",
-      "`events`: el recorrido completo, del más viejo al más nuevo. Cada evento trae `at` (UTC), `actor` (`gatekeeper`, `router`, `strategist`, `writer`, `human`, `scheduler` o `analyst`), `type` (`received`, `repeated`, `routed`, `advanced`, `approval_requested`, `approved`, `rejected`, `scheduled` o `published`), `detail` y `traceId` si usted lo envió.",
+      "`events`: el recorrido completo, del más viejo al más nuevo. Cada evento trae `at` (UTC), `actor` (`gatekeeper`, `router`, `strategist`, `writer`, `human`, `scheduler` o `analyst`), `type` (`received`, `repeated`, `routed`, `advanced`, `approval_requested`, `approved`, `rejected`, `content_updated`, `scheduled`, `publish_failed` o `published`), `detail` y `traceId` si usted lo envió.",
     ],
   },
   formats: {
@@ -336,7 +336,7 @@ const en: DocsText = {
       "`status`: one of the stages in Life of a request.",
       "`permalink`: empty (`null`) until it is published.",
       "`receivedAt`: when it came in, in UTC.",
-      "`events`: the full trace, oldest first. Each event has `at` (UTC), `actor` (`gatekeeper`, `router`, `strategist`, `writer`, `human`, `scheduler` or `analyst`), `type` (`received`, `repeated`, `routed`, `advanced`, `approval_requested`, `approved`, `rejected`, `scheduled` or `published`), `detail` and `traceId` when you sent one.",
+      "`events`: the full trace, oldest first. Each event has `at` (UTC), `actor` (`gatekeeper`, `router`, `strategist`, `writer`, `human`, `scheduler` or `analyst`), `type` (`received`, `repeated`, `routed`, `advanced`, `approval_requested`, `approved`, `rejected`, `content_updated`, `scheduled`, `publish_failed` or `published`), `detail` and `traceId` when you sent one.",
     ],
   },
   formats: {

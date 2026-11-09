@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, useTransition, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
-import { addAccount, addPublication, advance, decide, instagramPosts, pieceTrace, postInsights, removeAccount, saveProfile, toggleAgent, toggleItem, weekAgenda } from "../../app/panel/actions";
+import { addAccount, addPublication, advance, decide, instagramPosts, postInsights, removeAccount, saveProfile, toggleAgent, toggleItem, weekAgenda } from "../../app/panel/actions";
 import { useI18n } from "../../i18n/client";
 import type { Dictionary } from "../../i18n/dictionaries";
 import { addDays, costaRicaTime, mondayOf, monthLabel, shortDate, todayInCostaRica, weekNumber, weekRange } from "../../lib/dates";
@@ -12,6 +12,7 @@ import { FORMATS, type Format } from "../../lib/gatekeeper";
 import { summaryFacts, trackedLink } from "../../lib/insights";
 import type { Snapshot } from "../../lib/panel";
 import { AGENT_TONES, AgentMark, Logo, NavIcon } from "./Marks";
+import PieceSheet from "./PieceSheet";
 import { AccountView, ProfileMenu } from "./Profile";
 
 type View = "team" | "week" | "networks" | "results" | "account";
@@ -105,7 +106,7 @@ export default function PanelApp({ initial }: { initial: Snapshot }) {
 
         {failure && <p className="np-alert" role="alert">{t.panel.saveFailed}</p>}
 
-        {view === "team" && <Team snap={snap} busy={busy} accountOf={accountOf} onAdvance={(id) => run(() => advance(id))} onDecide={(id, approved) => run(() => decide(id, approved))} onToggleAgent={(id) => run(() => toggleAgent(id))} />}
+        {view === "team" && <Team snap={snap} busy={busy} accountOf={accountOf} onAdvance={(id) => run(() => advance(id))} onDecide={(id, approved) => run(() => decide(id, approved))} onToggleAgent={(id) => run(() => toggleAgent(id))} onSnapshot={(next) => animate(() => setSnap(next))} />}
 
         {view === "week" && <Week snap={snap} busy={busy} day={day} onPickDay={setDay} accountOf={accountOf} onToggle={(id) => run(() => toggleItem(id))} />}
 
@@ -503,7 +504,7 @@ function Lineup({ snap, focus, onFocus }: { snap: Snapshot; focus: string | null
   );
 }
 
-function Team({ snap, busy, accountOf, onAdvance, onDecide, onToggleAgent }: { snap: Snapshot; busy: boolean; accountOf: (id: string) => Account | undefined; onAdvance: (id: number) => void; onDecide: (id: number, approved: boolean) => void; onToggleAgent: (id: string) => void }) {
+function Team({ snap, busy, accountOf, onAdvance, onDecide, onToggleAgent, onSnapshot }: { snap: Snapshot; busy: boolean; accountOf: (id: string) => Account | undefined; onAdvance: (id: number) => void; onDecide: (id: number, approved: boolean) => void; onToggleAgent: (id: string) => void; onSnapshot: (next: Snapshot) => void }) {
   const { t } = useI18n();
   const [focus, setFocus] = useState<string | null>(null);
   const [traced, setTraced] = useState<Piece | null>(null);
@@ -575,96 +576,17 @@ function Team({ snap, busy, accountOf, onAdvance, onDecide, onToggleAgent }: { s
         {shown.length === 0 && <p className="np-note">{focus ? t.team.agentEmpty : t.team.empty}</p>}
       </div>
       <p className="np-note np-rule">{t.team.rule}</p>
-      {traced && <Trace piece={traced} onClose={() => setTraced(null)} />}
+      {traced && (
+        <PieceSheet
+          key={traced.id}
+          pieceId={traced.id}
+          snapshotPiece={snap.pieces.find((piece) => piece.id === traced.id) ?? traced}
+          approvalId={snap.approvals.find((item) => item.pieceId === traced.id)?.id}
+          onClose={() => setTraced(null)}
+          onSnapshot={onSnapshot}
+        />
+      )}
     </>
-  );
-}
-
-type TraceEvent = Awaited<ReturnType<typeof pieceTrace>>[number];
-
-/** Everything that happened to a piece: who acted, what they did and when, oldest first. */
-function Trace({ piece, onClose }: { piece: Piece; onClose: () => void }) {
-  const { t, locale } = useI18n();
-  const [events, setEvents] = useState<TraceEvent[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    let live = true;
-    pieceTrace(piece.id)
-      .then((rows) => live && setEvents(rows))
-      .catch(() => live && setFailed(true));
-    return () => {
-      live = false;
-    };
-  }, [piece.id]);
-
-  useEffect(() => {
-    const close = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [onClose]);
-
-  const when = new Intl.DateTimeFormat(t.locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Costa_Rica" });
-  const source = events?.find((event) => event.type === "received")?.detail;
-  const reference = source?.reference ? String(source.reference) : null;
-  // Long references (intenexo:<company>:<request>) read better by their end; the whole one is one click away.
-  const shortReference = reference && reference.length > 24 ? `…${reference.slice(-12)}` : reference;
-  const copy = async () => {
-    if (!reference) return;
-    try {
-      await navigator.clipboard.writeText(reference);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {
-      setCopied(false);
-    }
-  };
-  return (
-    <div className="np-scrim" onClick={(event) => event.target === event.currentTarget && onClose()}>
-      <section role="dialog" aria-modal="true" aria-label={t.trace.title} className="sheet trace" lang={locale}>
-        <div className="sheet__head detail__head">
-          <div>
-            <h2>{t.trace.title}</h2>
-            <p>{piece.title}</p>
-          </div>
-          <button type="button" className="sheet__close" aria-label={t.common.close} onClick={onClose} autoFocus>×</button>
-        </div>
-        <dl className="trace__meta">
-          <div><dt>{t.trace.piece(piece.id)}</dt><dd>{t.trace.lead}</dd></div>
-          {source?.source && <div><dt>{t.trace.source}</dt><dd>{String(source.source).toUpperCase()}</dd></div>}
-          {reference && (
-            <div>
-              <dt>{t.trace.reference}</dt>
-              <dd>
-                <code title={reference}>{shortReference}</code>
-                <button type="button" className="trace__copy" onClick={copy} aria-label={t.trace.copy} title={t.trace.copy}>{copied ? t.trace.copied : "⧉"}</button>
-              </dd>
-            </div>
-          )}
-          {events && <div><dt>{t.trace.steps(events.length)}</dt><dd /></div>}
-        </dl>
-        {failed && <p className="np-alert" role="alert">{t.trace.failed}</p>}
-        {!events && !failed && <p className="np-note" aria-live="polite">{t.trace.loading}</p>}
-        {events?.length === 0 && <p className="np-note">{t.trace.empty}</p>}
-        {events && events.length > 0 && (
-          <ol className="trace__list">
-            {events.map((event, index) => (
-              <li key={`${event.at}-${index}`} className={`trace__item${event.actor === "human" ? " is-human" : ""}`}>
-                <AgentMark agent={event.actor} size={34} />
-                <div>
-                  <p><strong>{agentName(t, event.actor)}</strong> <time dateTime={event.at}>{when.format(new Date(event.at))}</time></p>
-                  <p>{t.trace.events[event.type]?.(event.detail) ?? event.type}</p>
-                  {(event.detail.backfilled || event.traceId) && (
-                    <small>{event.detail.backfilled ? t.trace.backfilled : `${t.trace.traceId} ${event.traceId}`}</small>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-    </div>
   );
 }
 
