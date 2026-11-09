@@ -4,6 +4,7 @@ import { isDate } from "../../lib/dates";
 import { dictionaryFor } from "../../i18n/dictionaries";
 import { issueMessage } from "../../i18n/issues";
 import { getLocale } from "../../i18n/server";
+import { listIntake, type IntakeOutcome } from "../../lib/intake";
 import * as panel from "../../lib/panel";
 
 export async function weekAgenda(weekStart: string) {
@@ -102,4 +103,11 @@ export async function pieceTrace(pieceId: number) {
 export async function saveBrandKit(accountId: string, kit: panel.BrandKit) {
   const problem = await panel.saveBrandKit(accountId, kit);
   return problem ? { error: dictionaryFor(await getLocale()).brandKit.issues[problem] } : { snapshot: await panel.loadPanel() };
+}
+
+/** The gatekeeper's log with each refusal already written in the language of the screen. */
+export async function intakeEntries(outcome?: IntakeOutcome) {
+  const locale = await getLocale();
+  const rows = await listIntake(outcome === "accepted" || outcome === "repeated" || outcome === "refused" ? outcome : undefined);
+  return rows.map((row) => ({ ...row, message: row.code ? issueMessage({ code: row.code as never, params: row.params ?? undefined }, locale) : null }));
 }

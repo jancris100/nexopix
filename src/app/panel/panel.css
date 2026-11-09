@@ -394,3 +394,24 @@ button.history__row:hover { border-color: var(--line-2); box-shadow: 0 8px 22px 
 .piece-preview__drawn { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; background: var(--paper); }
 .piece-preview__thumbs { display: flex; gap: 6px; padding: 8px 10px 0; }
 .piece-preview__thumbs img, .piece-preview__thumbs video { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; }
+
+/* ---------- Gatekeeper intake ---------- */
+.team-tools { display: flex; justify-content: flex-end; }
+.team-tools .np-btn { gap: 8px; }
+.intake__list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.intake__row { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.intake__row.is-refused { border-color: #efc4c4; background: #fffafa; }
+.intake__badge { justify-self: start; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+.intake__badge.is-accepted { background: #e3f1ee; color: var(--accent); }
+.intake__badge.is-repeated { background: var(--paper); color: var(--soft); }
+.intake__badge.is-refused { background: #fcf0f0; color: #8f1d1d; }
+.intake__main { display: grid; gap: 2px; min-width: 0; }
+.intake__main strong { font-size: 14.5px; overflow-wrap: anywhere; }
+.intake__main small { color: var(--soft); font-size: 12.5px; overflow-wrap: anywhere; }
+.intake__reason { margin-top: 4px; color: #8f1d1d; font-size: 14px; }
+.intake__side { display: grid; justify-items: end; gap: 6px; }
+.intake__side time { color: var(--soft); font-size: 12.5px; white-space: nowrap; }
+@media (max-width: 640px) {
+  .intake__row { grid-template-columns: minmax(0, 1fr); }
+  .intake__side { justify-items: start; grid-auto-flow: column; align-items: center; }
+}

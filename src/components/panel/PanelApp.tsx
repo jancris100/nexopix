@@ -12,6 +12,7 @@ import { FORMATS, type Format } from "../../lib/gatekeeper";
 import { summaryFacts, trackedLink } from "../../lib/insights";
 import type { Snapshot } from "../../lib/panel";
 import { AGENT_TONES, AgentMark, Logo, NavIcon } from "./Marks";
+import IntakeSheet from "./IntakeSheet";
 import PieceSheet from "./PieceSheet";
 import { AccountView, ProfileMenu } from "./Profile";
 
@@ -508,6 +509,7 @@ function Team({ snap, busy, accountOf, onAdvance, onDecide, onToggleAgent, onSna
   const { t } = useI18n();
   const [focus, setFocus] = useState<string | null>(null);
   const [traced, setTraced] = useState<Piece | null>(null);
+  const [intake, setIntake] = useState(false);
   const agentOf = (id: string) => snap.agents.find((agent) => agent.id === id);
   const focusAgent: Agent | undefined = focus ? agentOf(focus) : undefined;
   const station = STATIONS.find((item) => item.agent === focus);
@@ -557,6 +559,11 @@ function Team({ snap, busy, accountOf, onAdvance, onDecide, onToggleAgent, onSna
   return (
     <>
       <Lineup snap={snap} focus={focus} onFocus={setFocus} />
+      <div className="team-tools">
+        <button type="button" className="np-btn" onClick={() => setIntake(true)}>
+          <AgentMark agent="gatekeeper" size={22} /> {t.intake.open}
+        </button>
+      </div>
       {focusAgent && (
         <div className="focus">
           <p><strong>{agentName(t, focusAgent.id)}.</strong> {t.agents[focusAgent.id]?.job ?? focusAgent.job}.</p>
@@ -576,6 +583,17 @@ function Team({ snap, busy, accountOf, onAdvance, onDecide, onToggleAgent, onSna
         {shown.length === 0 && <p className="np-note">{focus ? t.team.agentEmpty : t.team.empty}</p>}
       </div>
       <p className="np-note np-rule">{t.team.rule}</p>
+      {intake && (
+        <IntakeSheet
+          onClose={() => setIntake(false)}
+          onOpenPiece={(pieceId) => {
+            const piece = snap.pieces.find((item) => item.id === pieceId);
+            if (!piece) return;
+            setIntake(false);
+            setTraced(piece);
+          }}
+        />
+      )}
       {traced && (
         <PieceSheet
           key={traced.id}

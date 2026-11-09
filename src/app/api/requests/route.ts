@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiError, refuseWithoutKey } from "../../../lib/apikey";
 import { cleanTraceId } from "../../../lib/events";
+import { recordIntake } from "../../../lib/intake";
 import { createRequest, requestStatus } from "../../../lib/panel";
 
 /**
@@ -11,10 +12,18 @@ import { createRequest, requestStatus } from "../../../lib/panel";
 export async function POST(request: Request) {
   const refused = refuseWithoutKey(request);
   if (refused) return refused;
+  const traceId = cleanTraceId(request.headers.get("x-trace-id"));
   const body = await request.json().catch(() => null);
-  if (typeof body !== "object" || body === null || Array.isArray(body)) return apiError(request, 400, { code: "body_not_json" });
-  const result = await createRequest(body, undefined, cleanTraceId(request.headers.get("x-trace-id")));
-  if (!result.ok) return apiError(request, 422, result.issue);
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    await recordIntake({ outcome: "refused", body: null, code: "body_not_json", traceId });
+    return apiError(request, 400, { code: "body_not_json" });
+  }
+  const result = await createRequest(body, undefined, traceId);
+  if (!result.ok) {
+    await recordIntake({ outcome: "refused", body, code: result.issue.code, params: result.issue.params ?? null, traceId });
+    return apiError(request, 422, result.issue);
+  }
+  await recordIntake({ outcome: result.duplicate ? "repeated" : "accepted", body, pieceId: result.pieceId, traceId });
   return NextResponse.json(
     { id: result.pieceId, status: result.status, manual: result.manual, duplicate: result.duplicate },
     { status: result.duplicate ? 200 : 201 },

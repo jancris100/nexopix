@@ -64,6 +64,13 @@
       "when": 1794196015491,
       "tag": "0008_brand_and_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794197667569,
+      "tag": "0009_intake_log",
+      "breakpoints": true
     }
   ]
 }

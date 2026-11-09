@@ -153,3 +153,28 @@ export const pieceVersions = pgTable(
   },
   (table) => [uniqueIndex("piece_versions_piece_version").on(table.pieceId, table.version)],
 );
+
+/**
+ * Every request that reached the gatekeeper through the API: accepted, repeated or refused, with its reason. Refused
+ * requests never become pieces, so this is the only place where they can be seen. Never edited.
+ */
+export const intakeLog = pgTable(
+  "intake_log",
+  {
+    id: serial("id").primaryKey(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    outcome: text("outcome").notNull(),
+    source: text("source"),
+    reference: text("reference"),
+    account: text("account"),
+    network: text("network"),
+    format: text("format"),
+    goal: text("goal"),
+    /** The refusal code and the values of its message (the message is written in the language of whoever reads it). */
+    code: text("code"),
+    params: jsonb("params").$type<Record<string, string | number>>(),
+    pieceId: integer("piece_id").references(() => pieces.id),
+    traceId: text("trace_id"),
+  },
+  (table) => [index("intake_log_at").on(table.at)],
+);
