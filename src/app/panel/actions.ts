@@ -67,3 +67,7 @@ export async function saveOwner(values: panel.OwnerProfile) {
   const refusal = await panel.saveOwnerProfile(values);
   return refusal ? { error: dictionaryFor(await getLocale()).account.emailInvalid } : { snapshot: await panel.loadPanel() };
 }
+
+export async function pieceTrace(pieceId: number) {
+  return Number.isInteger(pieceId) ? panel.pieceTrace(pieceId) : [];
+}

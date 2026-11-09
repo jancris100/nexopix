@@ -96,3 +96,22 @@ export const ownerProfile = pgTable("owner_profile", {
   company: text("company").notNull().default(""),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * What happened to a piece, in order: who acted (gatekeeper, router, an agent or the person), what they did and when.
+ * Never edited or deleted: it is the trace another system reads through the API.
+ */
+export const pieceEvents = pgTable(
+  "piece_events",
+  {
+    id: serial("id").primaryKey(),
+    pieceId: integer("piece_id").notNull().references(() => pieces.id),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    actor: text("actor").notNull(),
+    type: text("type").notNull(),
+    detail: jsonb("detail").$type<Record<string, string | number | boolean | null>>(),
+    /** The trace id of the system that caused it (x-trace-id), to follow one request across systems. */
+    traceId: text("trace_id"),
+  },
+  (table) => [index("piece_events_piece").on(table.pieceId, table.at)],
+);

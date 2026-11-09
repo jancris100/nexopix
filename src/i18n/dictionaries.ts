@@ -1,7 +1,13 @@
 import type { Locale } from "./locale";
 
 type N = number;
+type Detail = Record<string, string | number | boolean | null>;
 const plural = (count: N, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+const STAGES_ES = ["Idea", "Producción", "Revisión", "Programado", "Publicado"];
+const STAGES_EN = ["Idea", "Production", "Review", "Scheduled", "Published"];
+const LANES_ES: Record<string, string> = { reels: "Reels", posts: "Publicaciones", ads: "Meta Ads" };
+const LANES_EN: Record<string, string> = { reels: "Reels", posts: "Posts", ads: "Meta Ads" };
+const stage = (names: string[], value: unknown) => names[Number(value)] ?? String(value);
 
 /** Every text a person reads in Nexopix, in Spanish and English. The keys are the same in both. */
 const es = {
@@ -23,6 +29,7 @@ const es = {
   networkNames: { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok" } as Record<string, string>,
   days: ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"],
   agents: {
+    gatekeeper: { name: "Portero", job: "Revisa cada petición con reglas fijas antes de que entre" },
     router: { name: "Enrutador", job: "Decide a qué pipeline y cuenta va cada pieza" },
     strategist: { name: "Estratega", job: "Propone ideas y arma la semana" },
     writer: { name: "Guionista", job: "Escribe guiones y descripciones" },
@@ -234,6 +241,28 @@ const es = {
     sessionOn: "El panel está protegido con contraseña.",
     sessionOff: "El panel no tiene contraseña: cualquiera con el enlace puede entrar.",
   },
+  trace: {
+    open: (title: string) => `Ver el recorrido de ${title}`,
+    title: "Recorrido de la pieza",
+    lead: (id: N) => `Pieza #${id}: cada paso, quién lo hizo y cuándo.`,
+    from: (source: string, reference: string | null) => `Llegó de ${source}${reference ? ` con la referencia ${reference}` : ""}.`,
+    loading: "Cargando el recorrido…",
+    failed: "No se pudo cargar el recorrido.",
+    empty: "Esta pieza todavía no tiene pasos registrados.",
+    traceId: "Rastreo",
+    backfilled: "Registrado al activar el recorrido",
+    events: {
+      received: (d: Detail) => `Revisó la petición${d.source ? ` de ${d.source}` : ""} y pasó las reglas${d.product ? `. Producto: ${d.product}` : ""}${d.media ? `, con ${plural(Number(d.media), "archivo", "archivos")}` : ""}.`,
+      repeated: () => "Llegó otra vez la misma referencia y respondió con esta pieza, sin duplicarla.",
+      routed: (d: Detail) => `La mandó a ${LANES_ES[String(d.pipeline)] ?? d.pipeline}${d.account ? ` para ${d.account}` : ""}${d.publishOn ? `, para el ${d.publishOn}` : ""}${d.manual ? ", como tarea manual" : ""}.`,
+      advanced: (d: Detail) => (d.from === undefined || d.from === null ? `Estaba en ${stage(STAGES_ES, d.to)} cuando empezó el registro.` : `Pasó la pieza de ${stage(STAGES_ES, d.from)} a ${stage(STAGES_ES, d.to)}.`),
+      approval_requested: () => "Dejó la pieza lista y pidió tu aprobación.",
+      approved: () => "Aprobaste la pieza.",
+      rejected: () => "Rechazaste la pieza y volvió a producción.",
+      scheduled: (d: Detail) => `La programó para el ${d.on} a las ${d.time}.`,
+      published: () => "La pieza quedó publicada.",
+    } as Record<string, (detail: Detail) => string>,
+  },
   login: {
     title: "Entrar al panel",
     meta: "Entrar a Nexopix",
@@ -286,6 +315,7 @@ const en: Dictionary = {
   networkNames: { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok" },
   days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
   agents: {
+    gatekeeper: { name: "Gatekeeper", job: "Checks every request with fixed rules before it comes in" },
     router: { name: "Router", job: "Decides which pipeline and account each piece goes to" },
     strategist: { name: "Strategist", job: "Proposes ideas and plans the week" },
     writer: { name: "Writer", job: "Writes scripts and captions" },
@@ -496,6 +526,28 @@ const en: Dictionary = {
     sessionTitle: "Session",
     sessionOn: "The panel is protected with a password.",
     sessionOff: "The panel has no password: anyone with the link can get in.",
+  },
+  trace: {
+    open: (title) => `See the trace of ${title}`,
+    title: "Piece trace",
+    lead: (id) => `Piece #${id}: every step, who took it and when.`,
+    from: (source, reference) => `Came from ${source}${reference ? ` with the reference ${reference}` : ""}.`,
+    loading: "Loading the trace…",
+    failed: "The trace could not be loaded.",
+    empty: "This piece has no recorded steps yet.",
+    traceId: "Trace",
+    backfilled: "Recorded when the trace was turned on",
+    events: {
+      received: (d) => `Checked the request${d.source ? ` from ${d.source}` : ""} and it passed the rules${d.product ? `. Product: ${d.product}` : ""}${d.media ? `, with ${plural(Number(d.media), "file", "files")}` : ""}.`,
+      repeated: () => "The same reference came in again; it answered with this piece without duplicating it.",
+      routed: (d) => `Sent it to ${LANES_EN[String(d.pipeline)] ?? d.pipeline}${d.account ? ` for ${d.account}` : ""}${d.publishOn ? `, for ${d.publishOn}` : ""}${d.manual ? ", as a manual task" : ""}.`,
+      advanced: (d) => (d.from === undefined || d.from === null ? `It was at ${stage(STAGES_EN, d.to)} when the trace started.` : `Moved the piece from ${stage(STAGES_EN, d.from)} to ${stage(STAGES_EN, d.to)}.`),
+      approval_requested: () => "Got the piece ready and asked for your approval.",
+      approved: () => "You approved the piece.",
+      rejected: () => "You rejected the piece and it went back to production.",
+      scheduled: (d) => `Scheduled it for ${d.on} at ${d.time}.`,
+      published: () => "The piece was published.",
+    },
   },
   login: {
     title: "Log in to the panel",

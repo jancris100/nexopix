@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, refuseWithoutKey } from "../../../lib/apikey";
+import { cleanTraceId } from "../../../lib/events";
 import { createRequest, requestStatus } from "../../../lib/panel";
 
 /**
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
   if (refused) return refused;
   const body = await request.json().catch(() => null);
   if (typeof body !== "object" || body === null || Array.isArray(body)) return apiError(request, 400, { code: "body_not_json" });
-  const result = await createRequest(body);
+  const result = await createRequest(body, undefined, cleanTraceId(request.headers.get("x-trace-id")));
   if (!result.ok) return apiError(request, 422, result.issue);
   return NextResponse.json(
     { id: result.pieceId, status: result.status, manual: result.manual, duplicate: result.duplicate },

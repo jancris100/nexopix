@@ -77,6 +77,7 @@ const es: DocsText = {
       ["Dirección base", "`https://nexopix.vercel.app`"],
       ["Formato", "JSON en UTF-8. En los envíos, el encabezado `content-type: application/json`."],
       ["Identificación", "Cada llamada lleva el encabezado `x-api-key` con la clave de su sistema."],
+      ["Rastreo", "Opcional: el encabezado `x-trace-id` (letras, números y guiones, hasta 64) con el código de rastreo de su sistema. Queda guardado en el recorrido de la pieza para seguir una misma petición en los dos sistemas."],
       ["Idioma de los errores", "Los mensajes de error vienen en inglés. Con el encabezado `accept-language: es` vienen en español. El campo `code` nunca cambia."],
       ["Fechas", "Los días van como `YYYY-MM-DD` en hora de Costa Rica. Los momentos exactos vuelven en UTC (ISO 8601)."],
     ],
@@ -152,6 +153,7 @@ const es: DocsText = {
       "`status`: una de las etapas del Recorrido de una petición.",
       "`permalink`: vacío (`null`) hasta que esté publicada.",
       "`receivedAt`: el momento en que entró, en UTC.",
+      "`events`: el recorrido completo, del más viejo al más nuevo. Cada evento trae `at` (UTC), `actor` (`gatekeeper`, `router`, `strategist`, `writer`, `human`, `scheduler` o `analyst`), `type` (`received`, `repeated`, `routed`, `advanced`, `approval_requested`, `approved`, `rejected`, `scheduled` o `published`), `detail` y `traceId` si usted lo envió.",
     ],
   },
   formats: {
@@ -258,6 +260,7 @@ const en: DocsText = {
       ["Base URL", "`https://nexopix.vercel.app`"],
       ["Format", "JSON in UTF-8. When sending, the header `content-type: application/json`."],
       ["Authentication", "Every call carries the `x-api-key` header with your system's key."],
+      ["Tracing", "Optional: the `x-trace-id` header (letters, numbers and hyphens, up to 64) with your system's trace id. It is kept in the piece's trace so one request can be followed across both systems."],
       ["Error language", "Error messages come in English. With the header `accept-language: es` they come in Spanish. The `code` field never changes."],
       ["Dates", "Days are written `YYYY-MM-DD` in Costa Rica time. Exact moments come back in UTC (ISO 8601)."],
     ],
@@ -333,6 +336,7 @@ const en: DocsText = {
       "`status`: one of the stages in Life of a request.",
       "`permalink`: empty (`null`) until it is published.",
       "`receivedAt`: when it came in, in UTC.",
+      "`events`: the full trace, oldest first. Each event has `at` (UTC), `actor` (`gatekeeper`, `router`, `strategist`, `writer`, `human`, `scheduler` or `analyst`), `type` (`received`, `repeated`, `routed`, `advanced`, `approval_requested`, `approved`, `rejected`, `scheduled` or `published`), `detail` and `traceId` when you sent one.",
     ],
   },
   formats: {

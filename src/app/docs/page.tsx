@@ -66,6 +66,7 @@ const REQUEST_BODY = `{
 const CURL_REQUEST = `curl ${BASE}/api/requests \\
   -H "x-api-key: YOUR_KEY" \\
   -H "content-type: application/json" \\
+  -H "x-trace-id: 4f1c0b9e2d7a4c55a1b3e8f6d2c4a901" \\
   -d '{
     "account": "@intenexo.cr",
     "network": "instagram",
@@ -106,7 +107,17 @@ const STATUS_RESPONSE = `{
   "source": "intenexo",
   "reference": "intenexo:company-12:4581",
   "permalink": "https://www.instagram.com/p/C0abc123/",
-  "receivedAt": "2026-11-08T22:20:56.905Z"
+  "receivedAt": "2026-11-08T22:20:56.905Z",
+  "events": [
+    { "at": "2026-11-08T22:20:56.905Z", "actor": "gatekeeper", "type": "received",
+      "detail": { "source": "intenexo", "reference": "intenexo:company-12:4581", "media": 2, "product": "Electric juicer" },
+      "traceId": "4f1c0b9e2d7a4c55a1b3e8f6d2c4a901" },
+    { "at": "2026-11-08T22:20:56.905Z", "actor": "router", "type": "routed",
+      "detail": { "pipeline": "posts", "account": "@intenexo.cr", "format": "carousel", "manual": false, "publishOn": "2026-11-20" },
+      "traceId": "4f1c0b9e2d7a4c55a1b3e8f6d2c4a901" },
+    { "at": "2026-11-09T15:02:11.120Z", "actor": "writer", "type": "approval_requested", "detail": { "from": 1, "to": 2 }, "traceId": null },
+    { "at": "2026-11-09T16:40:03.551Z", "actor": "human", "type": "approved", "detail": { "from": 2, "to": 3 }, "traceId": null }
+  ]
 }`;
 
 const JS_EXAMPLE = `// On the server (Node 18 or newer). Never in the browser.

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, useTransition, type CSSProperties } from "react";
 import { flushSync } from "react-dom";
-import { addAccount, addPublication, advance, decide, instagramPosts, postInsights, removeAccount, saveProfile, toggleAgent, toggleItem, weekAgenda } from "../../app/panel/actions";
+import { addAccount, addPublication, advance, decide, instagramPosts, pieceTrace, postInsights, removeAccount, saveProfile, toggleAgent, toggleItem, weekAgenda } from "../../app/panel/actions";
 import { useI18n } from "../../i18n/client";
 import type { Dictionary } from "../../i18n/dictionaries";
 import { addDays, costaRicaTime, mondayOf, monthLabel, shortDate, todayInCostaRica, weekNumber, weekRange } from "../../lib/dates";
@@ -506,6 +506,7 @@ function Lineup({ snap, focus, onFocus }: { snap: Snapshot; focus: string | null
 function Team({ snap, busy, accountOf, onAdvance, onDecide, onToggleAgent }: { snap: Snapshot; busy: boolean; accountOf: (id: string) => Account | undefined; onAdvance: (id: number) => void; onDecide: (id: number, approved: boolean) => void; onToggleAgent: (id: string) => void }) {
   const { t } = useI18n();
   const [focus, setFocus] = useState<string | null>(null);
+  const [traced, setTraced] = useState<Piece | null>(null);
   const agentOf = (id: string) => snap.agents.find((agent) => agent.id === id);
   const focusAgent: Agent | undefined = focus ? agentOf(focus) : undefined;
   const station = STATIONS.find((item) => item.agent === focus);
@@ -524,10 +525,10 @@ function Team({ snap, busy, accountOf, onAdvance, onDecide, onToggleAgent }: { s
     return (
       <article key={piece.id} className={`piece${piece.stage === REVIEW ? " piece--human" : ""}`} style={{ viewTransitionName: `piece-${piece.id}` }}>
         <AgentMark agent={place.agent} size={40} />
-        <div className="piece__text">
+        <button type="button" className="piece__text piece__open" aria-label={t.trace.open(piece.title)} onClick={() => setTraced(piece)}>
           <strong>{piece.title}</strong>
           <small>{t.team.pieceOn(formatName(t, piece.format), accountOf(piece.accountId)?.handle ?? t.common.deletedAccount)}</small>
-        </div>
+        </button>
         <div className="piece__track" aria-label={t.team.stage(t.stages[piece.stage])}>
           <span className="piece__dots" aria-hidden="true">
             {STATIONS.map((item) => <i key={item.stage} className={item.stage < piece.stage ? "is-past" : item.stage === piece.stage ? "is-now" : ""} />)}
@@ -574,7 +575,69 @@ function Team({ snap, busy, accountOf, onAdvance, onDecide, onToggleAgent }: { s
         {shown.length === 0 && <p className="np-note">{focus ? t.team.agentEmpty : t.team.empty}</p>}
       </div>
       <p className="np-note np-rule">{t.team.rule}</p>
+      {traced && <Trace piece={traced} onClose={() => setTraced(null)} />}
     </>
+  );
+}
+
+type TraceEvent = Awaited<ReturnType<typeof pieceTrace>>[number];
+
+/** Everything that happened to a piece: who acted, what they did and when, oldest first. */
+function Trace({ piece, onClose }: { piece: Piece; onClose: () => void }) {
+  const { t, locale } = useI18n();
+  const [events, setEvents] = useState<TraceEvent[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    pieceTrace(piece.id)
+      .then((rows) => live && setEvents(rows))
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, [piece.id]);
+
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [onClose]);
+
+  const when = new Intl.DateTimeFormat(t.locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Costa_Rica" });
+  const source = events?.find((event) => event.type === "received")?.detail;
+  return (
+    <div className="np-scrim" onClick={(event) => event.target === event.currentTarget && onClose()}>
+      <section role="dialog" aria-modal="true" aria-label={t.trace.title} className="sheet trace" lang={locale}>
+        <div className="sheet__head detail__head">
+          <div>
+            <h2>{t.trace.title}</h2>
+            <p>{piece.title}</p>
+          </div>
+          <button type="button" className="sheet__close" aria-label={t.common.close} onClick={onClose} autoFocus>×</button>
+        </div>
+        <p className="np-note">{t.trace.lead(piece.id)}{source?.source ? ` ${t.trace.from(String(source.source), source.reference ? String(source.reference) : null)}` : ""}</p>
+        {failed && <p className="np-alert" role="alert">{t.trace.failed}</p>}
+        {!events && !failed && <p className="np-note" aria-live="polite">{t.trace.loading}</p>}
+        {events?.length === 0 && <p className="np-note">{t.trace.empty}</p>}
+        {events && events.length > 0 && (
+          <ol className="trace__list">
+            {events.map((event, index) => (
+              <li key={`${event.at}-${index}`} className={`trace__item${event.actor === "human" ? " is-human" : ""}`}>
+                <AgentMark agent={event.actor} size={34} />
+                <div>
+                  <p><strong>{agentName(t, event.actor)}</strong> <time dateTime={event.at}>{when.format(new Date(event.at))}</time></p>
+                  <p>{t.trace.events[event.type]?.(event.detail) ?? event.type}</p>
+                  {(event.detail.backfilled || event.traceId) && (
+                    <small>{event.detail.backfilled ? t.trace.backfilled : `${t.trace.traceId} ${event.traceId}`}</small>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+    </div>
   );
 }
 

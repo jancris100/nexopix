@@ -1,6 +1,7 @@
 import { and, asc, between, desc, eq, lte, min } from "drizzle-orm";
 import { getDb, isTestDatabase } from "../db";
-import { accounts, agendaItems, agents, approvals, ownerProfile, pieceResults, pieces } from "../db/schema";
+import { accounts, agendaItems, agents, approvals, ownerProfile, pieceEvents, pieceResults, pieces } from "../db/schema";
+import { recordEvent, STAGE_ACTORS } from "./events";
 import { addDays, isDate, mondayOf, todayInCostaRica } from "./dates";
 import { normalizeHandle } from "./handles";
 import type { InstagramProfile } from "./instagram";
@@ -150,8 +151,14 @@ export async function advancePiece(id: number) {
     if (!piece || piece.stage === REVIEW || piece.stage >= PUBLISHED) return;
     const stage = piece.stage + 1;
     await tx.update(pieces).set({ stage }).where(eq(pieces.id, id));
+    const actor = STAGE_ACTORS[piece.stage];
     if (stage === REVIEW) {
       await tx.insert(approvals).values({ pieceId: id, agent: piece.pipeline === "ads" ? "strategist" : "scheduler" });
+      await recordEvent(tx, id, "approval_requested", actor, { from: piece.stage, to: stage });
+    } else if (stage === PUBLISHED) {
+      await recordEvent(tx, id, "published", actor, { from: piece.stage, to: stage });
+    } else {
+      await recordEvent(tx, id, "advanced", actor, { from: piece.stage, to: stage });
     }
   });
 }
@@ -164,15 +171,12 @@ export async function decideApproval(id: number, approved: boolean) {
     if (!approval) return;
     await tx.update(approvals).set({ status: approved ? "approved" : "rejected", decidedAt: new Date() }).where(eq(approvals.id, id));
     await tx.update(pieces).set({ stage: approved ? SCHEDULED : 1 }).where(eq(pieces.id, approval.pieceId));
+    await recordEvent(tx, approval.pieceId, approved ? "approved" : "rejected", "human", { from: REVIEW, to: approved ? SCHEDULED : 1 });
     if (approved) {
       const [piece] = await tx.select().from(pieces).where(eq(pieces.id, approval.pieceId));
-      await tx.insert(agendaItems).values({
-        scheduledOn: addDays(todayInCostaRica(), 1),
-        time: "10:00",
-        title: piece.title,
-        format: piece.format,
-        accountId: piece.accountId,
-      });
+      const on = addDays(todayInCostaRica(), 1);
+      await tx.insert(agendaItems).values({ scheduledOn: on, time: "10:00", title: piece.title, format: piece.format, accountId: piece.accountId });
+      await recordEvent(tx, approval.pieceId, "scheduled", "scheduler", { on, time: "10:00" });
     }
   });
 }
@@ -181,7 +185,7 @@ export async function decideApproval(id: number, approved: boolean) {
  * The Portero receives a request and keeps it: checked with fixed rules, stored with what it carried, and never twice
  * for the same reference of the same sender.
  */
-export async function createRequest(request: Partial<Request>, scheduledOn?: string) {
+export async function createRequest(request: Partial<Request>, scheduledOn?: string, traceId?: string | null) {
   const db = await getDb();
   const verdict = checkRequest(request, await db.select(accountColumns).from(accounts));
   if (!verdict.ok) return verdict;
@@ -193,7 +197,10 @@ export async function createRequest(request: Partial<Request>, scheduledOn?: str
       .select({ id: pieces.id, stage: pieces.stage })
       .from(pieces)
       .where(and(eq(pieces.origin, source!), eq(pieces.externalRef, brief.reference)));
-    if (known) return { ok: true as const, pieceId: known.id, manual, duplicate: true, status: statusOf(known.stage) };
+    if (known) {
+      await recordEvent(db, known.id, "repeated", "gatekeeper", { source, reference: brief.reference }, traceId);
+      return { ok: true as const, pieceId: known.id, manual, duplicate: true, status: statusOf(known.stage) };
+    }
   }
 
   const day = brief.publishOn ?? scheduledOn;
@@ -203,6 +210,8 @@ export async function createRequest(request: Partial<Request>, scheduledOn?: str
       .values({ pipeline: FORMATS[format].pipeline, title, format, accountId: account.id, scene: account.scene, origin: source, externalRef: brief.reference, brief: { ...brief, source } })
       .returning({ id: pieces.id });
     if (day) await tx.insert(agendaItems).values({ scheduledOn: day, time: "12:00", title, format, accountId: account.id });
+    await recordEvent(tx, piece.id, "received", "gatekeeper", { source, reference: brief.reference, media: brief.media.length, product: brief.product?.name ?? null }, traceId);
+    await recordEvent(tx, piece.id, "routed", "router", { pipeline: FORMATS[format].pipeline, account: account.handle, format, manual, publishOn: day ?? null }, traceId);
     return piece.id;
   });
   return { ok: true as const, pieceId, manual, duplicate: false, status: statusOf(0) };
@@ -223,7 +232,10 @@ export async function requestStatus(lookup: { id?: number; source?: string; refe
     .from(pieces)
     .where(where);
   if (!piece) return null;
-  const [owner] = await db.select({ handle: accounts.handle, network: accounts.network }).from(accounts).where(eq(accounts.id, piece.accountId));
+  const [[owner], events] = await Promise.all([
+    db.select({ handle: accounts.handle, network: accounts.network }).from(accounts).where(eq(accounts.id, piece.accountId)),
+    pieceTrace(piece.id),
+  ]);
   return {
     id: piece.id,
     status: statusOf(piece.stage),
@@ -235,7 +247,16 @@ export async function requestStatus(lookup: { id?: number; source?: string; refe
     reference: piece.externalRef,
     permalink: piece.permalink,
     receivedAt: piece.createdAt.toISOString(),
+    /** Everything that happened to the piece, oldest first. */
+    events,
   };
+}
+
+/** The trace of a piece, oldest first, as the API and the panel show it. */
+export async function pieceTrace(pieceId: number) {
+  const db = await getDb();
+  const rows = await db.select().from(pieceEvents).where(eq(pieceEvents.pieceId, pieceId)).orderBy(asc(pieceEvents.at), asc(pieceEvents.id));
+  return rows.map((row) => ({ at: row.at.toISOString(), actor: row.actor, type: row.type, detail: row.detail ?? {}, traceId: row.traceId }));
 }
 
 /** The accounts a sender may choose from, with the formats each network takes. Never tokens. */

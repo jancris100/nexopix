@@ -314,3 +314,16 @@ button.history__row:hover { border-color: var(--line-2); box-shadow: 0 8px 22px 
   .pmenu__panel { width: min(300px, calc(100vw - 32px)); }
   .account__form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- Trace of a piece ---------- */
+.piece__open { display: block; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.piece__open:hover strong { text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.trace { max-width: 560px; }
+.trace__list { position: relative; display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.trace__item { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding-bottom: 18px; }
+.trace__item:not(:last-child)::before { content: ""; position: absolute; left: 16.5px; top: 38px; bottom: 2px; width: 1px; background: var(--line-2); }
+.trace__item p { font-size: 14.5px; line-height: 1.45; }
+.trace__item p:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.trace__item time { color: var(--soft); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.trace__item small { display: block; margin-top: 3px; color: var(--soft); font-size: 12px; overflow-wrap: anywhere; }
+.trace__item.is-human strong { color: var(--human); }

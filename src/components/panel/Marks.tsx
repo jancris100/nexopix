@@ -1,5 +1,6 @@
 /** Each agent's tone: a soft fill for its badge and a strong one for its symbol. */
 export const AGENT_TONES: Record<string, { soft: string; strong: string }> = {
+  gatekeeper: { soft: "#ECEEF0", strong: "#3B4350" },
   router: { soft: "#E3F1EE", strong: "#0E7C66" },
   strategist: { soft: "#E8E9FB", strong: "#4C55C9" },
   writer: { soft: "#E4EEF8", strong: "#2F6CA8" },
@@ -9,6 +10,7 @@ export const AGENT_TONES: Record<string, { soft: string; strong: string }> = {
 };
 
 const SYMBOLS: Record<string, React.ReactNode> = {
+  gatekeeper: <path d="M12 3.5 5.5 6v5.2c0 4 2.8 7.6 6.5 8.8 3.7-1.2 6.5-4.8 6.5-8.8V6L12 3.5Zm-3 8.6 2.1 2.1 4-4.2" />,
   router: <path d="M4 12h6m0 0 5-5h5m-10 5 5 5h5" />,
   strategist: (
     <>
