@@ -1,6 +1,8 @@
-import { and, asc, between, desc, eq, isNotNull, lte, min } from "drizzle-orm";
+import { del, list } from "@vercel/blob";
+import { and, asc, between, desc, eq, isNotNull, lt, lte, min } from "drizzle-orm";
 import { getDb, isTestDatabase } from "../db";
-import { accounts, agendaItems, agents, approvals, ownerProfile, pieceEvents, pieceResults, pieces } from "../db/schema";
+import { accounts, agendaItems, agents, approvals, ownerProfile, pieceEvents, pieceResults, pieces, pieceVersions } from "../db/schema";
+import { expiredMedia, MEDIA_DELETE_LIMIT, MEDIA_PREFIX, type StoredBlob } from "./cleanup";
 import { cleanContent, fullCaption, latestVersion, nextVersion, versionsOf, writeVersion, type ContentIssue, type ContentValues } from "./content";
 import { absoluteMedia, cleanColor, cleanCreative, creativePath, isCreativePath, isTemplate, TEMPLATES, type Creative, type TemplateId } from "./templates";
 import type { RenderInput } from "./render";
@@ -171,9 +173,14 @@ export async function advancePiece(id: number) {
 /** A day and hour of Costa Rica (UTC-6, no daylight saving) as a moment. */
 const costaRicaMoment = (day: string, time: string) => new Date(`${day}T${time}:00-06:00`);
 
-/** When an approved piece goes out: the moment chosen, or the day asked at 10:00, or tomorrow at 10:00; never in the past. */
-function publishMoment(chosen: { day?: string; time?: string } | undefined, asked: string | null | undefined) {
-  const time = chosen?.time && /^([01]\d|2[0-3]):[0-5]\d$/.test(chosen.time) ? chosen.time : "10:00";
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * When an approved piece goes out: the moment chosen, or the day and hour asked (10:00 when no hour was asked), or
+ * tomorrow at that hour; never in the past.
+ */
+function publishMoment(chosen: { day?: string; time?: string } | undefined, asked: string | null | undefined, askedTime?: string | null) {
+  const time = chosen?.time && TIME.test(chosen.time) ? chosen.time : askedTime && TIME.test(askedTime) ? askedTime : "10:00";
   const today = todayInCostaRica();
   const day = chosen?.day && isDate(chosen.day) && chosen.day >= today ? chosen.day : asked && asked >= today ? asked : addDays(today, 1);
   const moment = costaRicaMoment(day, time);
@@ -196,7 +203,7 @@ export async function decideApproval(id: number, approved: boolean, decision: De
     await recordEvent(tx, approval.pieceId, approved ? "approved" : "rejected", "human", { from: REVIEW, to: approved ? SCHEDULED : 1, reason });
     if (!approved) return;
     const [piece] = await tx.select().from(pieces).where(eq(pieces.id, approval.pieceId));
-    const when = publishMoment(decision, piece.brief?.publishOn);
+    const when = publishMoment(decision, piece.brief?.publishOn, piece.brief?.publishTime);
     await tx.update(pieces).set({ scheduledAt: when.at }).where(eq(pieces.id, piece.id));
     const [slot] = await tx.select({ id: agendaItems.id }).from(agendaItems).where(eq(agendaItems.pieceId, piece.id)).limit(1);
     if (slot) {
@@ -231,21 +238,34 @@ export async function createRequest(request: Partial<Request>, scheduledOn?: str
   }
 
   const day = brief.publishOn ?? scheduledOn;
+  // Finished content (an animated reel made outside) has nothing left to produce: it waits for a person's approval.
+  const stage = brief.ready ? REVIEW : 0;
   const pieceId = await db.transaction(async (tx) => {
     const [piece] = await tx
       .insert(pieces)
-      .values({ pipeline: FORMATS[format].pipeline, title, format, accountId: account.id, scene: account.scene, origin: source, externalRef: brief.reference, brief: { ...brief, source } })
+      .values({ pipeline: FORMATS[format].pipeline, title, format, accountId: account.id, scene: account.scene, origin: source, externalRef: brief.reference, brief: { ...brief, source }, stage })
       .returning({ id: pieces.id });
-    if (day) await tx.insert(agendaItems).values({ scheduledOn: day, time: "12:00", title, format, accountId: account.id, pieceId: piece.id });
-    const fallback = account.defaultTemplate && isTemplate(account.defaultTemplate) && (TEMPLATES[account.defaultTemplate].formats as readonly string[]).includes(format) && brief.media.length > 0 ? account.defaultTemplate : null;
+    if (day) await tx.insert(agendaItems).values({ scheduledOn: day, time: brief.publishTime ?? "12:00", title, format, accountId: account.id, pieceId: piece.id });
+    const fallback = !brief.ready && account.defaultTemplate && isTemplate(account.defaultTemplate) && (TEMPLATES[account.defaultTemplate].formats as readonly string[]).includes(format) && brief.media.length > 0 ? account.defaultTemplate : null;
     const template = brief.template ?? fallback;
     const media = template ? [creativePath(piece.id, 1), ...brief.media] : brief.media;
-    await writeVersion(tx, piece.id, { idea: [title, brief.notes].filter(Boolean).join("\n"), caption: "", hashtags: "", media }, "router", null, { template, creative: brief.creative, version: 1 });
-    await recordEvent(tx, piece.id, "received", "gatekeeper", { source, reference: brief.reference, media: brief.media.length, product: brief.product?.name ?? null }, traceId);
-    await recordEvent(tx, piece.id, "routed", "router", { pipeline: FORMATS[format].pipeline, account: account.handle, format, manual, publishOn: day ?? null }, traceId);
+    await writeVersion(
+      tx,
+      piece.id,
+      { idea: [title, brief.notes].filter(Boolean).join("\n"), caption: brief.caption ?? "", hashtags: brief.hashtags ?? "", media },
+      "router",
+      null,
+      { template, creative: brief.creative, version: 1 },
+    );
+    await recordEvent(tx, piece.id, "received", "gatekeeper", { source, reference: brief.reference, media: brief.media.length, product: brief.product?.name ?? null, ready: brief.ready }, traceId);
+    await recordEvent(tx, piece.id, "routed", "router", { pipeline: FORMATS[format].pipeline, account: account.handle, format, manual, publishOn: day ?? null, publishTime: brief.publishTime }, traceId);
+    if (brief.ready) {
+      await tx.insert(approvals).values({ pieceId: piece.id, agent: "scheduler" });
+      await recordEvent(tx, piece.id, "approval_requested", "router", { from: 0, to: REVIEW, ready: true }, traceId);
+    }
     return piece.id;
   });
-  return { ok: true as const, pieceId, manual, duplicate: false, status: statusOf(0) };
+  return { ok: true as const, pieceId, manual, duplicate: false, status: statusOf(stage) };
 }
 
 /** What another system may read of a piece: where it is and, once published, where to see it. */
@@ -458,6 +478,34 @@ export async function publishDue(limit = 5) {
   const results = [];
   for (const piece of due) results.push({ id: piece.id, ...(await publishPiece(piece.id, "schedule")) });
   return results;
+}
+
+/**
+ * Deletes the uploaded files (media/) older than 7 days that no piece still on its way uses (see cleanup.ts). Runs
+ * with the scheduler; does nothing while the blob store is not connected. Returns how many files it deleted.
+ */
+export async function cleanMedia(now = new Date()) {
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) return { deleted: 0, skipped: "blob_not_connected" as const };
+  const db = await getDb();
+  const versions = await db
+    .select({ media: pieceVersions.media })
+    .from(pieceVersions)
+    .innerJoin(pieces, eq(pieces.id, pieceVersions.pieceId))
+    .where(lt(pieces.stage, PUBLISHED));
+  const inUse = new Set(versions.flatMap((row) => row.media));
+
+  const stored: StoredBlob[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await list({ prefix: MEDIA_PREFIX, cursor, limit: 1000, token });
+    stored.push(...page.blobs.map((blob) => ({ url: blob.url, pathname: blob.pathname, uploadedAt: new Date(blob.uploadedAt) })));
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
+
+  const expired = expiredMedia(stored, inUse, now).slice(0, MEDIA_DELETE_LIMIT);
+  if (expired.length > 0) await del(expired, { token });
+  return { deleted: expired.length, skipped: null };
 }
 
 export type BrandKit = { logoUrl?: string | null; brandColor?: string | null; accentColor?: string | null; defaultTemplate?: string | null };

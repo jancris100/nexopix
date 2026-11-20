@@ -27,6 +27,21 @@ Sin `DATABASE_URL` el panel usa un Postgres embebido (`.data/`) con datos de pru
 | `NEXOPIX_SECRET` | Clave de al menos 32 caracteres: firma la sesión y cifra los permisos de las redes. |
 | `CRON_SECRET` | Activa `GET /api/cron/publish` (encabezado `Authorization: Bearer <CRON_SECRET>`): el Programador publica en Instagram las piezas aprobadas cuya hora llegó. Vercel Cron lo llama una vez al día (`vercel.json`); para publicar a la hora exacta, la acción de GitHub `.github/workflows/publish.yml` lo llama cada 10 minutos con el secreto del repositorio `NEXOPIX_CRON_SECRET` (mismo valor). |
 | `META_APP_SECRET` | Clave secreta de la app de Meta (inicio de sesión unificado de Instagram). El ID de la app y el de la configuración ya vienen en el código; se cambian con `META_APP_ID` y `META_CONFIG_ID`. Redirección: `https://<dominio>/api/meta/callback`. |
+| `BLOB_READ_WRITE_TOKEN` | Almacenamiento de Vercel Blob (lo crea Vercel al conectar un Blob store al proyecto). Habilita `POST /api/media/upload`, que entrega un permiso de 30 minutos para subir un MP4 o una imagen directo al almacenamiento. El archivo no pasa por las funciones, que aceptan unos 4.5 MB. Lo subido se borra a los **7 días**: el Programador (`/api/cron/publish`) elimina los archivos de `media/` con más de 7 días, salvo los de piezas que todavía no se publicaron. Una vez publicado, Instagram guarda su propia copia. |
+
+## Reels terminados
+
+Un reel hecho afuera (MP4 vertical y su portada) entra listo para aprobar:
+
+```powershell
+npm run reel -- --video "<reel.mp4>" --portada "<portada.jpg>" --cuenta @curioso_al_dia --texto "…" --hashtags "…" --fecha 2026-11-20 --hora 19:00
+```
+
+El script (`scripts/subir-reel.ts`) hace dos cosas:
+1. Sube los archivos con `POST /api/media/upload`.
+2. Crea la pieza con `POST /api/requests` y `ready: true`. La pieza llega con el texto, los hashtags y la hora, y queda pendiente de aprobación.
+
+Al publicarla, la imagen va como portada del reel (`cover_url`). Lee `NEXOPIX_API_KEY` de `.env.local`, y `--probar` verifica todo sin subir nada. En Claude Code, la habilidad `subir-reel` lo hace a partir de "manda el reel X para mañana 7 p. m.".
 
 ## En el teléfono
 

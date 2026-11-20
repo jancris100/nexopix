@@ -2,7 +2,7 @@ import type { Issue, IssueCode } from "../lib/gatekeeper";
 import type { Locale } from "./locale";
 
 /** Errors of the API itself, before the Portero looks at a request. */
-export type ApiErrorCode = "api_disabled" | "invalid_key" | "body_not_json" | "not_found" | "reference_missing" | "id_invalid" | "logo_not_https" | "color_invalid";
+export type ApiErrorCode = "api_disabled" | "invalid_key" | "body_not_json" | "not_found" | "reference_missing" | "id_invalid" | "logo_not_https" | "color_invalid" | "uploads_disabled" | "upload_type" | "upload_size" | "upload_name";
 
 type Params = Record<string, string | number>;
 type Messages = Record<IssueCode | ApiErrorCode, (params: Params) => string>;
@@ -35,6 +35,15 @@ const en: Messages = {
   template_format: (p) => `The template ${p.template} does not draw the format ${p.format}.`,
   creative_invalid: () => "creative allows headline (up to 60), cta (up to 24), showPrice (true or false) and up to 3 benefits of 48 characters.",
   product_compare_price: () => "The previous price must be a number of zero or more.",
+  time_invalid: () => "The time must look like HH:MM (24 hours, Costa Rica).",
+  caption_too_long: (p) => `Caption and hashtags allow up to ${p.max} characters together.`,
+  hashtags_too_many: (p) => `Up to ${p.max} hashtags are allowed.`,
+  ready_invalid: () => "ready must be true or false.",
+  ready_incomplete: () => "Finished content needs its caption and its files (a reel, its MP4 video).",
+  uploads_disabled: () => "Uploads are not enabled yet: the blob store is not connected.",
+  upload_type: () => "Only MP4 videos and JPEG or PNG images can be uploaded.",
+  upload_size: (p) => `That file is too big: up to ${p.max} MB.`,
+  upload_name: () => "The file needs a name and its size in bytes.",
   api_disabled: () => "The API is not enabled yet.",
   invalid_key: () => "Invalid key.",
   body_not_json: () => "The body must be a JSON object.",
@@ -73,6 +82,15 @@ const es: Messages = {
   template_format: (p) => `La plantilla ${p.template} no dibuja el formato ${p.format}.`,
   creative_invalid: () => "creative admite headline (hasta 60), cta (hasta 24), showPrice (true o false) y hasta 3 beneficios de 48 caracteres.",
   product_compare_price: () => "El precio anterior debe ser un número de cero o más.",
+  time_invalid: () => "La hora debe verse como HH:MM (24 horas, hora de Costa Rica).",
+  caption_too_long: (p) => `El texto y los hashtags admiten hasta ${p.max} caracteres juntos.`,
+  hashtags_too_many: (p) => `Se admiten hasta ${p.max} hashtags.`,
+  ready_invalid: () => "ready debe ser true o false.",
+  ready_incomplete: () => "El contenido terminado necesita su texto y sus archivos (un reel, su video MP4).",
+  uploads_disabled: () => "La subida de archivos todavía no está habilitada: falta conectar el almacenamiento.",
+  upload_type: () => "Solo se pueden subir videos MP4 e imágenes JPEG o PNG.",
+  upload_size: (p) => `Ese archivo es demasiado grande: hasta ${p.max} MB.`,
+  upload_name: () => "El archivo necesita un nombre y su tamaño en bytes.",
   api_disabled: () => "La API todavía no está habilitada.",
   invalid_key: () => "Clave no válida.",
   body_not_json: () => "El cuerpo debe ser un objeto JSON.",

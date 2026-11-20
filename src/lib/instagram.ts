@@ -219,6 +219,17 @@ async function waitUntilReady(containerId: string, token: string) {
 }
 
 /**
+ * The container of a reel: the first MP4 is the video and the first image, when there is one, its cover (the cover
+ * the reel's author designed, instead of a frame Instagram picks). Also shared to the feed.
+ */
+export function reelParams(media: string[], caption: string): Record<string, string> {
+  const video = media.find(isVideoUrl);
+  if (!video) throw new PublishError("media_missing", "Un reel necesita un video MP4.");
+  const cover = media.find((item) => !isVideoUrl(item) && /^https:\/\//i.test(item));
+  return { media_type: "REELS", video_url: video, caption, share_to_feed: "true", ...(cover ? { cover_url: cover } : {}) };
+}
+
+/**
  * Publishes on an Instagram professional account through the Content Publishing API: a container per file, then
  * media_publish. Images must be public JPEG addresses; videos public MP4. Returns the media id and its permalink.
  */
@@ -242,10 +253,8 @@ export async function publishMedia(userId: string, token: string, input: { forma
     if (hasVideo) for (const child of children) await waitUntilReady(child, token);
     container = String((await graphPost(`${owner}/media`, { media_type: "CAROUSEL", children: children.join(","), caption }, token)).id);
   } else if (format === "reel") {
-    const url = media.find(isVideoUrl);
-    if (!url) throw new PublishError("media_missing", "Un reel necesita un video MP4.");
     hasVideo = true;
-    container = String((await graphPost(`${owner}/media`, { media_type: "REELS", video_url: url, caption, share_to_feed: "true" }, token)).id);
+    container = String((await graphPost(`${owner}/media`, reelParams(media, caption), token)).id);
   } else if (format === "story") {
     const url = media[0];
     hasVideo = isVideoUrl(url);

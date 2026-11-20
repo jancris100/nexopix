@@ -107,3 +107,44 @@ test("every refusal reads well in English and Spanish", () => {
   assert.equal(issueMessage(verdict.issue, "en"), "A carousel needs 2 to 10 images.");
   assert.equal(issueMessage(verdict.issue, "es"), "Un carrusel necesita de 2 a 10 imágenes.");
 });
+
+const reel = { ...valid, media: ["https://store.test/media/2026-11/a1-reel.mp4", "https://store.test/media/2026-11/b2-portada.jpg"] };
+
+test("finished content arrives with its caption, hashtags and hour, ready for approval", () => {
+  const verdict = checkRequest(
+    { ...reel, caption: "  Tu celular escucha?  ", hashtags: "#tecnologia, curiosidades #tecnologia", publishOn: "2026-11-20", publishTime: "19:00", ready: true },
+    accounts,
+    "2026-11-19",
+  );
+  assert.ok(verdict.ok);
+  assert.equal(verdict.brief.caption, "Tu celular escucha?");
+  assert.equal(verdict.brief.hashtags, "#tecnologia #curiosidades");
+  assert.equal(verdict.brief.publishTime, "19:00");
+  assert.equal(verdict.brief.ready, true);
+});
+
+test("a request without the new fields keeps working as before", () => {
+  const verdict = checkRequest(valid, accounts);
+  assert.ok(verdict.ok);
+  assert.deepEqual([verdict.brief.caption, verdict.brief.hashtags, verdict.brief.publishTime, verdict.brief.ready], [null, null, null, false]);
+});
+
+test("finished content follows fixed rules", () => {
+  const tags = Array.from({ length: 31 }, (_, i) => `#t${i}`).join(" ");
+  const cases: [unknown, string][] = [
+    [{ ...reel, publishTime: "7pm" }, "time_invalid"],
+    [{ ...reel, publishTime: "24:00" }, "time_invalid"],
+    [{ ...reel, caption: "x".repeat(2201) }, "caption_too_long"],
+    [{ ...reel, hashtags: tags }, "hashtags_too_many"],
+    [{ ...reel, ready: "yes" }, "ready_invalid"],
+    [{ ...reel, ready: true }, "ready_incomplete"],
+    [{ ...valid, media: ["https://store.test/portada.jpg"], caption: "Hola", ready: true }, "ready_incomplete"],
+  ];
+  for (const [request, code] of cases) {
+    const verdict = checkRequest(request as Partial<Request>, accounts, "2026-11-19");
+    assert.equal(verdict.ok ? "ok" : verdict.issue.code, code);
+  }
+  const missing = checkRequest({ ...reel, ready: true }, accounts);
+  assert.ok(!missing.ok);
+  assert.equal(issueMessage(missing.issue, "es"), "El contenido terminado necesita su texto y sus archivos (un reel, su video MP4).");
+});

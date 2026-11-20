@@ -1,3 +1,4 @@
+import { CONTENT_LIMITS, normalizeHashtags } from "./content";
 import { isDate, todayInCostaRica } from "./dates";
 import { cleanCreative, isTemplate, TEMPLATES, type Creative, type TemplateId } from "./templates";
 
@@ -55,7 +56,18 @@ export type Request = {
   product?: Product;
   /** Desired publication day, YYYY-MM-DD in Costa Rica. */
   publishOn?: string;
+  /** Desired hour that day, HH:MM in Costa Rica (24 h); 10:00 when missing. */
+  publishTime?: string;
   notes?: string;
+  /** The caption, already written (finished content). */
+  caption?: string;
+  /** Hashtags with or without #, separated by spaces or commas. */
+  hashtags?: string;
+  /**
+   * The content is finished (made outside, for instance an animated reel): the piece skips production and waits for
+   * a person's approval. Needs the caption and the media (a reel, its MP4).
+   */
+  ready?: boolean;
   /** A template id (offer, launch…): the main image is drawn with it. */
   template?: string;
   creative?: Creative;
@@ -70,9 +82,15 @@ export type Brief = {
   product: Product | null;
   media: string[];
   publishOn: string | null;
+  /** HH:MM in Costa Rica, or null for the default hour. */
+  publishTime: string | null;
   notes: string | null;
   template: TemplateId | null;
   creative: Creative;
+  /** Finished content that arrived with the request: it goes straight to approval. */
+  caption: string | null;
+  hashtags: string | null;
+  ready: boolean;
 };
 
 /** Why a request was refused: a stable code for programs and the values its message needs. */
@@ -105,7 +123,12 @@ export type IssueCode =
   | "template_unknown"
   | "template_format"
   | "creative_invalid"
-  | "product_compare_price";
+  | "product_compare_price"
+  | "time_invalid"
+  | "caption_too_long"
+  | "hashtags_too_many"
+  | "ready_invalid"
+  | "ready_incomplete";
 
 export type Verdict<T extends Account = Account> =
   | { ok: true; account: T; format: Format; title: string; manual: boolean; brief: Brief }
@@ -125,6 +148,8 @@ export const LIMITS = {
 const REFERENCE = /^[\w.:-]{1,120}$/;
 const SOURCE = /^[a-z0-9-]{1,40}$/;
 const CURRENCY = /^[A-Z]{3}$/;
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+const isVideo = (url: string) => /\.(mp4|mov|m4v)(\?|#|$)/i.test(url);
 
 const isPublicUrl = (value: unknown): value is string => {
   if (typeof value !== "string") return false;
@@ -215,8 +240,21 @@ export function checkRequest<T extends Account>(request: Partial<Request>, accou
   if (publishOn !== null && !isDate(publishOn)) return refuse("date_invalid");
   if (publishOn !== null && publishOn < today) return refuse("date_past");
 
+  const publishTime = request.publishTime === undefined || request.publishTime === null || request.publishTime === "" ? null : text(request.publishTime);
+  if (publishTime !== null && !TIME.test(publishTime)) return refuse("time_invalid");
+
   const notes = text(request.notes);
   if (notes.length > LIMITS.notes) return refuse("notes_too_long", { max: LIMITS.notes });
+
+  const caption = text(request.caption);
+  const hashtags = normalizeHashtags(text(request.hashtags));
+  if (caption.length + (hashtags ? hashtags.length + 2 : 0) > CONTENT_LIMITS.caption) return refuse("caption_too_long", { max: CONTENT_LIMITS.caption });
+  if (hashtags.split(" ").filter(Boolean).length > CONTENT_LIMITS.hashtags) return refuse("hashtags_too_many", { max: CONTENT_LIMITS.hashtags });
+
+  if (request.ready !== undefined && typeof request.ready !== "boolean") return refuse("ready_invalid");
+  const ready = request.ready === true;
+  // Finished content must be publishable as it comes: the caption, and for a reel its video.
+  if (ready && (!caption || media.length === 0 || (format === "reel" && !media.some(isVideo)))) return refuse("ready_incomplete");
 
   let template: TemplateId | null = null;
   if (request.template !== undefined && request.template !== null && request.template !== "") {
@@ -233,6 +271,9 @@ export function checkRequest<T extends Account>(request: Partial<Request>, accou
     format,
     title,
     manual: request.mode === "manual" || request.network === "tiktok",
-    brief: { source, reference, product, media, publishOn, notes: notes || null, template, creative },
+    brief: {
+      source, reference, product, media, publishOn, publishTime, notes: notes || null, template, creative,
+      caption: caption || null, hashtags: hashtags || null, ready,
+    },
   };
 }
